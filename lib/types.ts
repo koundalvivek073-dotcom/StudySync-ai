@@ -25,7 +25,9 @@ export interface SyllabusItem {
 }
 
 export interface ParsedSyllabus {
+  id: string;           // unique ID for DB storage
   title: string;
+  source?: string;      // 'upload' | 'demo' | filename
   items: SyllabusItem[];
   totalHours: number;
   parseConfidence: number; // 0–1

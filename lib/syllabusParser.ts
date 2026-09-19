@@ -6,7 +6,7 @@
  * Toggle via NEXT_PUBLIC_USE_MOCK_AI=true in .env.local
  */
 
-import { ParsedSyllabus, SyllabusItem, Complexity } from './types';
+import { ParsedSyllabus, SyllabusItem } from './types';
 
 // ─── Color Palette ────────────────────────────────────────────────────────────
 
@@ -23,6 +23,8 @@ const nextColor = () => SUBJECT_COLORS[colorIndex++ % SUBJECT_COLORS.length];
 
 const MOCK_SYLLABI: ParsedSyllabus[] = [
   {
+    id: 'demo_cs_sem5',
+    source: 'demo',
     title: 'Computer Science Engineering — Semester 5',
     totalHours: 180,
     parseConfidence: 0.92,
@@ -90,6 +92,8 @@ const MOCK_SYLLABI: ParsedSyllabus[] = [
     ],
   },
   {
+    id: 'demo_upsc_gs',
+    source: 'demo',
     title: 'UPSC Civil Services — General Studies',
     totalHours: 240,
     parseConfidence: 0.88,
@@ -164,7 +168,13 @@ export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
     throw new Error(`Parse failed: ${res.statusText}`);
   }
 
-  return res.json() as Promise<ParsedSyllabus>;
+  const data = await res.json();
+  // Ensure id is present
+  return {
+    ...data,
+    id: data.id ?? `upload_${Date.now()}`,
+    source: file.name,
+  } as ParsedSyllabus;
 }
 
 /** Main entry point: uses mock or real depending on env var. */

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { ParsedSyllabus, AvailabilityProfile, ScheduleBlock, BlockStatus } from '@/lib/types';
+import { saveSyllabus, saveSchedule, persistBlockStatus } from '@/lib/dbSync';
 
 // ─── Store Interface ──────────────────────────────────────────────────────────
 
@@ -43,9 +44,18 @@ export const useAppStore = create<AppStore>()(
       currentStep: 0,
       isGenerating: false,
 
-      setSyllabus: (syllabus) => set({ syllabus }),
+      setSyllabus: (syllabus) => {
+        set({ syllabus });
+        // Persist to SQLite
+        saveSyllabus(syllabus);
+      },
       setProfile: (profile) => set({ profile }),
-      setSchedule: (schedule, warning) => set({ schedule, warning }),
+      setSchedule: (schedule, warning) => {
+        set({ schedule, warning });
+        // Persist schedule to SQLite
+        const { syllabus } = get();
+        if (syllabus) saveSchedule(schedule, syllabus.id);
+      },
       setStep: (currentStep) => set({ currentStep }),
       setGenerating: (isGenerating) => set({ isGenerating }),
 
@@ -56,6 +66,8 @@ export const useAppStore = create<AppStore>()(
             b.id === id && b.type === 'study' ? { ...b, status } : b,
           ),
         }));
+        // Persist status change to SQLite
+        persistBlockStatus(id, status);
       },
 
       // ── Reshuffle pending blocks into future free slots ────────────────────
