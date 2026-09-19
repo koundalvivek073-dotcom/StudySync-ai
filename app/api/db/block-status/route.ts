@@ -13,6 +13,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const db = getDb();
+    if (!db) return NextResponse.json({ ok: false, error: 'DB not available in this environment' }, { status: 503 });
     const result = db.prepare(
       'UPDATE schedule_blocks SET status = ?, updated_at = unixepoch() WHERE id = ?'
     ).run(status, id);

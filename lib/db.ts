@@ -1,20 +1,26 @@
 /**
  * lib/db.ts
  * SQLite database layer using better-sqlite3.
- * The .db file is created automatically at the project root.
- * Only runs on the server (Next.js API routes).
+ * Works locally. On Netlify/serverless, returns a no-op stub.
  */
 
-import Database from 'better-sqlite3';
-import path from 'path';
+// Detect serverless environment (Netlify, Vercel, etc.)
+const IS_SERVERLESS = process.env.DISABLE_SQLITE === 'true' ||
+  process.env.NETLIFY === 'true' ||
+  process.env.VERCEL === '1';
 
-const DB_PATH = path.join(process.cwd(), 'syllabiq.db');
+let _db: any = null;
 
-let _db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
+export function getDb(): any {
+  if (IS_SERVERLESS) return null; // DB disabled in serverless
   if (_db) return _db;
 
+  // Dynamically import to avoid bundling issues
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const Database = require('better-sqlite3');
+  const path = require('path');
+
+  const DB_PATH = path.join(process.cwd(), 'syllabiq.db');
   _db = new Database(DB_PATH);
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
@@ -23,9 +29,8 @@ export function getDb(): Database.Database {
   return _db;
 }
 
-function initSchema(db: Database.Database) {
+function initSchema(db: any) {
   db.exec(`
-    -- Stored syllabi
     CREATE TABLE IF NOT EXISTS syllabi (
       id          TEXT PRIMARY KEY,
       title       TEXT NOT NULL,
@@ -35,7 +40,6 @@ function initSchema(db: Database.Database) {
       created_at  INTEGER DEFAULT (unixepoch())
     );
 
-    -- Lifestyle profiles
     CREATE TABLE IF NOT EXISTS profiles (
       id          TEXT PRIMARY KEY,
       syllabus_id TEXT REFERENCES syllabi(id),
@@ -43,7 +47,6 @@ function initSchema(db: Database.Database) {
       created_at  INTEGER DEFAULT (unixepoch())
     );
 
-    -- Generated schedule blocks
     CREATE TABLE IF NOT EXISTS schedule_blocks (
       id            TEXT PRIMARY KEY,
       session_id    TEXT NOT NULL,

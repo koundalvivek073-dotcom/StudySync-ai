@@ -9,6 +9,7 @@ export async function POST(req: NextRequest) {
   try {
     const { sessionId, syllabusId, blocks } = await req.json();
     const db = getDb();
+    if (!db) return NextResponse.json({ ok: false, error: 'DB not available in this environment' }, { status: 503 });
 
     const upsert = db.prepare(`
       INSERT OR REPLACE INTO schedule_blocks

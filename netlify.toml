@@ -1,0 +1,11 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NEXT_PUBLIC_USE_MOCK_AI = "true"
+  # SQLite is disabled on Netlify (serverless env)
+  DISABLE_SQLITE = "true"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

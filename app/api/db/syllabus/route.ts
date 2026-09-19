@@ -11,6 +11,8 @@ export async function POST(req: NextRequest) {
     const { id, title, source, totalHours, items } = body;
 
     const db = getDb();
+    if (!db) return NextResponse.json({ ok: false, error: 'DB not available in this environment' }, { status: 503 });
+
     db.prepare(`
       INSERT OR REPLACE INTO syllabi (id, title, source, total_hours, items_json)
       VALUES (?, ?, ?, ?, ?)
@@ -26,6 +28,7 @@ export async function GET(req: NextRequest) {
   try {
     const id = req.nextUrl.searchParams.get('id');
     const db = getDb();
+    if (!db) return NextResponse.json({ ok: false, error: 'DB not available in this environment' }, { status: 503 });
 
     if (id) {
       const row: any = db.prepare('SELECT * FROM syllabi WHERE id = ?').get(id);
