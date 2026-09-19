@@ -4,7 +4,18 @@
 
 Upload your syllabus → Answer 5 lifestyle questions → Get a personalized timetable → Export as PDF.
 
-## Quick Start
+## 🌐 Live Demo
+
+👉 **[https://syllab-iq.netlify.app/](https://syllab-iq.netlify.app/)**
+
+| Page | URL |
+|------|-----|
+| 🏠 Home | https://syllab-iq.netlify.app/ |
+| 📄 Upload Syllabus | https://syllab-iq.netlify.app/upload |
+| 🧘 Questionnaire | https://syllab-iq.netlify.app/questionnaire |
+| 📅 Dashboard | https://syllab-iq.netlify.app/dashboard |
+
+## Quick Start (Local)
 
 ```bash
 cd "d:\Timetable maker\studysync"
@@ -19,7 +30,10 @@ Open [http://localhost:3000](http://localhost:3000)
 - 🧘 **Health-First Scheduling** — Sleep, meals, hygiene are never overridden
 - 🧠 **Peak-Energy Matching** — Hard topics during your best hours
 - 📅 **Calendar Dashboard** — Day / Week / Month views
+- ✅ **Task Status Rings** — Mark blocks completed or pending
+- 🔄 **Auto Reshuffle** — Pending tasks moved to future free slots
 - 📥 **PDF Export** — Styled, print-ready document
+- 💾 **SQLite Database** — Data persists locally (no account needed)
 
 ## Architecture
 
@@ -28,13 +42,16 @@ app/
 ├── page.tsx               ← Landing page
 ├── upload/page.tsx        ← Step 1: Syllabus upload & AI parsing
 ├── questionnaire/page.tsx ← Step 2: 5-step lifestyle wizard
-└── dashboard/page.tsx     ← Timetable calendar + PDF export
+├── dashboard/page.tsx     ← Timetable calendar + PDF export
+└── api/db/                ← SQLite API routes (local only)
 
 lib/
 ├── types.ts              ← All TypeScript interfaces
 ├── scheduler.ts          ← Health-first scheduling engine
 ├── syllabusParser.ts     ← Mock/real AI parser
-└── pdfExport.ts          ← jsPDF + html2canvas export
+├── pdfExport.ts          ← jsPDF + html2canvas export
+├── db.ts                 ← SQLite database layer
+└── dbSync.ts             ← Client-side DB sync helpers
 
 store/
 └── appStore.ts           ← Zustand global state (localStorage persisted)
@@ -50,7 +67,9 @@ store/
 
 - **Next.js 16** + TypeScript + Tailwind CSS v4
 - **Zustand** — state management with localStorage persistence
+- **better-sqlite3** — local SQLite database (no account needed)
 - **jsPDF + html2canvas** — client-side PDF generation
 - **react-dropzone** — file drag & drop
 - **date-fns** — date manipulation
 - **lucide-react** — icons
+- **Netlify** — hosting with `@netlify/plugin-nextjs`
