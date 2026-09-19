@@ -6,14 +6,14 @@ Upload your syllabus → Answer 5 lifestyle questions → Get a personalized tim
 
 ## 🌐 Live Demo
 
-👉 **[https://syllab-iq.netlify.app/](https://syllab-iq.netlify.app/)**
+👉 **[https://study-sync-ai.netlify.app/](https://study-sync-ai.netlify.app/)**
 
 | Page | URL |
 |------|-----|
-| 🏠 Home | https://syllab-iq.netlify.app/ |
-| 📄 Upload Syllabus | https://syllab-iq.netlify.app/upload |
-| 🧘 Questionnaire | https://syllab-iq.netlify.app/questionnaire |
-| 📅 Dashboard | https://syllab-iq.netlify.app/dashboard |
+| 🏠 Home | https://study-sync-ai.netlify.app/ |
+| 📄 Upload Syllabus | https://study-sync-ai.netlify.app//upload |
+| 🧘 Questionnaire | https://study-sync-ai.netlify.app//questionnaire |
+| 📅 Dashboard | https://study-sync-ai.netlify.app//dashboard |
 
 ## Quick Start (Local)
 
