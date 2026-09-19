@@ -73,6 +73,8 @@ export type BlockType =
   | 'buffer'
   | 'free';
 
+export type BlockStatus = 'upcoming' | 'completed' | 'pending';
+
 export interface ScheduleBlock {
   id: string;
   date: string; // ISO date 'YYYY-MM-DD'
@@ -84,6 +86,14 @@ export interface ScheduleBlock {
   color: string;
   icon?: string;
   notes?: string;
+  status?: BlockStatus; // only for study blocks
+  originalDate?: string; // tracks if this block was reshuffled
+}
+
+export interface ReshuffleResult {
+  updatedBlocks: ScheduleBlock[];
+  reshuffledCount: number;
+  couldNotFitCount: number;
 }
 
 // ─── App State ───────────────────────────────────────────────────────────────
