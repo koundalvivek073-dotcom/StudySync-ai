@@ -9,12 +9,24 @@ import {
 } from 'date-fns';
 import { useAppStore } from '@/store/appStore';
 import { generateSchedule } from '@/lib/scheduler';
-import { exportToPDF } from '@/lib/pdfExport';
+import { exportToPDF, generatePDFData } from '@/lib/pdfExport';
+import {
+  getStoredTimetablesList,
+  getStoredTimetable,
+  getLatestStoredTimetable,
+  saveTimetableLocally,
+  updateStoredTimetableBlocks,
+  updateStoredTimetablePDF,
+} from '@/lib/localTimetableStorage';
+import InAppPdfModal from '@/components/InAppPdfModal';
+import SavedTimetablesModal from '@/components/SavedTimetablesModal';
 import { ScheduleBlock, BlockStatus } from '@/lib/types';
+import { useIsMobile } from '@/hooks/useDeviceType';
 import {
   Sparkles, Calendar, ChevronLeft, ChevronRight, Download,
   AlertTriangle, Clock, BookOpen, Heart, RotateCcw, Sun, Moon,
   Coffee, CheckCircle2, XCircle, HelpCircle, RefreshCw, X,
+  BarChart2, Menu, Eye, HardDrive, FileText, Check, History,
 } from 'lucide-react';
 
 type ViewMode = 'day' | 'week' | 'month';
@@ -84,15 +96,18 @@ function BlockModal({
   return (
     // Backdrop
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center"
       style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
       onClick={onClose}
     >
       <div
-        className="relative w-80 rounded-2xl p-5 shadow-2xl"
+        className="relative w-full sm:w-80 rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl"
         style={{ background: '#151522', border: '1px solid rgba(255,255,255,0.1)' }}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Drag handle on mobile */}
+        <div className="w-10 h-1 rounded-full bg-[#333] mx-auto mb-4 sm:hidden" />
+
         {/* Close */}
         <button className="absolute top-3 right-3 text-[#555] hover:text-white transition-colors" onClick={onClose}>
           <X size={16} />
@@ -142,7 +157,7 @@ function BlockModal({
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => { onMark(block.id, 'completed'); onClose(); }}
-            className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95"
+            className="flex items-center justify-center gap-1.5 py-3 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95"
             style={{
               background: currentStatus === 'completed' ? '#22c55e33' : 'rgba(34,197,94,0.1)',
               border: `1px solid ${currentStatus === 'completed' ? '#22c55e' : '#22c55e44'}`,
@@ -153,7 +168,7 @@ function BlockModal({
           </button>
           <button
             onClick={() => { onMark(block.id, 'pending'); onClose(); }}
-            className="flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95"
+            className="flex items-center justify-center gap-1.5 py-3 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95"
             style={{
               background: currentStatus === 'pending' ? '#f59e0b33' : 'rgba(245,158,11,0.1)',
               border: `1px solid ${currentStatus === 'pending' ? '#f59e0b' : '#f59e0b44'}`,
@@ -196,26 +211,27 @@ function StatusRing({ status }: { status?: BlockStatus }) {
 // ─── Day View ─────────────────────────────────────────────────────────────────
 
 function DayView({
-  date, blocks, syllabus, onBlockClick,
+  date, blocks, syllabus, onBlockClick, isMobile,
 }: {
   date: Date; blocks: ScheduleBlock[]; syllabus: any;
   onBlockClick: (b: ScheduleBlock) => void;
+  isMobile?: boolean;
 }) {
   const dateStr = format(date, 'yyyy-MM-dd');
   const dayBlocks = blocks.filter((b) => b.date === dateStr);
-  const HOUR_HEIGHT = 60;
+  const HOUR_HEIGHT = isMobile ? 48 : 60;
 
   return (
     <div className="relative flex gap-0">
       {/* Time labels */}
-      <div className="w-14 flex-shrink-0">
+      <div className="w-10 sm:w-14 flex-shrink-0">
         {Array.from({ length: 24 }, (_, h) => (
           <div
             key={h}
-            className="time-label flex items-start justify-end pr-2"
+            className="time-label flex items-start justify-end pr-1 sm:pr-2"
             style={{ height: HOUR_HEIGHT }}
           >
-            {h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`}
+            {h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`}
           </div>
         ))}
       </div>
@@ -277,25 +293,27 @@ function DayView({
 // ─── Week View ────────────────────────────────────────────────────────────────
 
 function WeekView({
-  weekStart, blocks, syllabus, onBlockClick,
+  weekStart, blocks, syllabus, onBlockClick, isMobile,
 }: {
   weekStart: Date; blocks: ScheduleBlock[]; syllabus: any;
   onBlockClick: (b: ScheduleBlock) => void;
+  isMobile?: boolean;
 }) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const HOUR_HEIGHT = 48;
+  // On mobile, use smaller hour height and show in a horizontally scrollable container
+  const HOUR_HEIGHT = isMobile ? 36 : 48;
 
   return (
     <div className="overflow-x-auto">
       {/* Header */}
-      <div className="flex">
-        <div className="w-12 flex-shrink-0" />
+      <div className="flex" style={{ minWidth: isMobile ? 500 : undefined }}>
+        <div className="w-10 sm:w-12 flex-shrink-0" />
         {days.map((d) => (
           <div key={d.toISOString()} className="flex-1 text-center py-2 text-xs font-semibold border-b border-[rgba(255,255,255,0.06)]">
             <div className={`${isSameDay(d, new Date()) ? 'text-primary-400' : 'text-[#888baa]'}`}>
-              {format(d, 'EEE')}
+              {format(d, isMobile ? 'EEEEE' : 'EEE')}
             </div>
-            <div className={`text-base font-bold mt-0.5 w-7 h-7 rounded-full flex items-center justify-center mx-auto ${
+            <div className={`text-sm font-bold mt-0.5 w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center mx-auto ${
               isSameDay(d, new Date()) ? 'bg-primary-500 text-white' : ''
             }`}>
               {format(d, 'd')}
@@ -305,12 +323,12 @@ function WeekView({
       </div>
 
       {/* Grid */}
-      <div className="relative flex" style={{ height: 24 * HOUR_HEIGHT }}>
+      <div className="relative flex" style={{ height: 24 * HOUR_HEIGHT, minWidth: isMobile ? 500 : undefined }}>
         {/* Time labels */}
-        <div className="w-12 flex-shrink-0">
+        <div className="w-10 sm:w-12 flex-shrink-0">
           {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} className="time-label flex items-start justify-end pr-2" style={{ height: HOUR_HEIGHT }}>
-              {h % 3 === 0 ? (h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`) : ''}
+            <div key={h} className="time-label flex items-start justify-end pr-1 sm:pr-2" style={{ height: HOUR_HEIGHT }}>
+              {h % 3 === 0 ? (h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`) : ''}
             </div>
           ))}
         </div>
@@ -350,8 +368,8 @@ function WeekView({
                     onClick={() => block.type === 'study' && onBlockClick(block)}
                   >
                     <StatusRing status={block.status} />
-                    <span className="block truncate px-1 text-[9px] font-semibold text-white/90 pt-0.5 pr-3">
-                      {block.label.slice(0, 16)}
+                    <span className="block truncate px-0.5 sm:px-1 text-[8px] sm:text-[9px] font-semibold text-white/90 pt-0.5 pr-3">
+                      {block.label.slice(0, isMobile ? 8 : 16)}
                     </span>
                   </div>
                 );
@@ -367,10 +385,11 @@ function WeekView({
 // ─── Month View ───────────────────────────────────────────────────────────────
 
 function MonthView({
-  monthStart, blocks, onBlockClick,
+  monthStart, blocks, onBlockClick, isMobile,
 }: {
   monthStart: Date; blocks: ScheduleBlock[];
   onBlockClick: (b: ScheduleBlock) => void;
+  isMobile?: boolean;
 }) {
   const daysInMonth = getDaysInMonth(monthStart);
   const firstDayOfWeek = (startOfMonth(monthStart).getDay() + 6) % 7;
@@ -382,14 +401,14 @@ function MonthView({
 
   return (
     <div>
-      <div className="grid grid-cols-7 text-center text-xs text-[#888baa] mb-2">
-        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
-          <div key={d} className="py-1">{d}</div>
+      <div className="grid grid-cols-7 text-center text-[10px] sm:text-xs text-[#888baa] mb-2">
+        {(isMobile ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']).map((d, i) => (
+          <div key={i} className="py-1">{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
         {cells.map((day, idx) => {
-          if (!day) return <div key={`e${idx}`} className="h-20" />;
+          if (!day) return <div key={`e${idx}`} className="h-14 sm:h-20" />;
           const dateStr = format(day, 'yyyy-MM-dd');
           const dayBlocks = blocks.filter((b) => b.date === dateStr && b.type === 'study');
           const isToday = isSameDay(day, new Date());
@@ -399,18 +418,18 @@ function MonthView({
           return (
             <div
               key={dateStr}
-              className={`h-20 card p-1 overflow-hidden ${isToday ? 'border-primary-500' : ''}`}
+              className={`h-14 sm:h-20 card p-0.5 sm:p-1 overflow-hidden ${isToday ? 'border-primary-500' : ''}`}
             >
-              <div className={`text-xs font-bold mb-1 w-5 h-5 rounded-full flex items-center justify-center ${
+              <div className={`text-[10px] font-bold mb-0.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center ${
                 isToday ? 'bg-primary-500 text-white' : 'text-[#888baa]'
               }`}>
                 {format(day, 'd')}
               </div>
               <div className="space-y-0.5">
-                {dayBlocks.slice(0, 3).map((block) => (
+                {dayBlocks.slice(0, isMobile ? 2 : 3).map((block) => (
                   <div
                     key={block.id}
-                    className="text-[8px] rounded px-1 truncate font-semibold flex items-center gap-0.5 cursor-pointer hover:opacity-80"
+                    className="text-[7px] sm:text-[8px] rounded px-0.5 sm:px-1 truncate font-semibold flex items-center gap-0.5 cursor-pointer hover:opacity-80"
                     style={{
                       background: `${block.color}33`,
                       color: block.color,
@@ -421,18 +440,18 @@ function MonthView({
                   >
                     {block.status === 'completed' && '✅ '}
                     {block.status === 'pending' && '⏳ '}
-                    {block.label.replace('📚 ', '').slice(0, 12)}
+                    {block.label.replace('📚 ', '').slice(0, isMobile ? 6 : 12)}
                   </div>
                 ))}
-                {dayBlocks.length > 3 && (
-                  <div className="text-[8px] text-[#666]">+{dayBlocks.length - 3} more</div>
+                {dayBlocks.length > (isMobile ? 2 : 3) && (
+                  <div className="text-[7px] text-[#666]">+{dayBlocks.length - (isMobile ? 2 : 3)}</div>
                 )}
               </div>
               {/* Mini status counts */}
               {(completedCount > 0 || pendingCount > 0) && (
-                <div className="flex gap-1 mt-0.5">
-                  {completedCount > 0 && <span className="text-[7px] text-green-500">✅{completedCount}</span>}
-                  {pendingCount > 0 && <span className="text-[7px] text-amber-500">⏳{pendingCount}</span>}
+                <div className="flex gap-0.5 mt-0.5">
+                  {completedCount > 0 && <span className="text-[6px] sm:text-[7px] text-green-500">✅{completedCount}</span>}
+                  {pendingCount > 0 && <span className="text-[6px] sm:text-[7px] text-amber-500">⏳{pendingCount}</span>}
                 </div>
               )}
             </div>
@@ -466,7 +485,7 @@ function HealthSidebar({ profile, result, schedule }: { profile: any; result: an
       <h3 className="font-bold text-sm text-[#888baa] uppercase tracking-wide">Health Summary</h3>
       {items.map(({ icon: Icon, label, value, color }) => (
         <div key={label} className="card-inner flex items-center gap-3 p-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${color}22` }}>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${color}22` }}>
             <Icon className="w-4 h-4" style={{ color }} />
           </div>
           <div>
@@ -527,18 +546,54 @@ function HealthSidebar({ profile, result, schedule }: { profile: any; result: an
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { syllabus, profile, schedule, warning, setSyllabus, setSchedule, markBlock, reshufflePending } = useAppStore();
+  const { syllabus, profile, schedule, warning, setSyllabus, setProfile, setSchedule, markBlock, reshufflePending } = useAppStore();
   const [view, setView] = useState<ViewMode>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [exporting, setExporting] = useState(false);
   const [selectedBlock, setSelectedBlock] = useState<ScheduleBlock | null>(null);
   const [reshuffleMsg, setReshuffleMsg] = useState<string | null>(null);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [pdfDataUri, setPdfDataUri] = useState<string | null>(null);
+  const [savedModalOpen, setSavedModalOpen] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
+  const [activeTimetableId, setActiveTimetableId] = useState<string | undefined>(undefined);
+  const [exportToast, setExportToast] = useState<string | null>(null);
   const dashboardRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
-  // Demo mode: if no data, load a demo
+  // On mobile, default to day view for better readability
+  useEffect(() => {
+    if (isMobile) setView('day');
+  }, [isMobile]);
+
+  // Load saved timetable count & listen for storage changes
+  useEffect(() => {
+    const updateSavedInfo = async () => {
+      const list = await getStoredTimetablesList();
+      setSavedCount(list.length);
+    };
+    updateSavedInfo();
+    window.addEventListener('studysync_timetables_changed', updateSavedInfo);
+    return () => window.removeEventListener('studysync_timetables_changed', updateSavedInfo);
+  }, []);
+
+  // Demo mode or restore from device storage if active store is empty
   useEffect(() => {
     if (!syllabus || schedule.length === 0) {
       (async () => {
+        // 1. Check local device storage for user's previous timetable
+        const latest = await getLatestStoredTimetable();
+        if (latest) {
+          setSyllabus(latest.syllabus);
+          setProfile(latest.profile);
+          setSchedule(latest.blocks, null);
+          setActiveTimetableId(latest.id);
+          if (latest.pdfDataUri) setPdfDataUri(latest.pdfDataUri);
+          return;
+        }
+
+        // 2. Otherwise load demo timetable
         const { parseWithMock } = await import('@/lib/syllabusParser');
         const demoSyllabus = await parseWithMock(0);
         const demoProfile = {
@@ -557,7 +612,14 @@ export default function DashboardPage() {
         };
         const result = generateSchedule(demoSyllabus, demoProfile);
         setSyllabus(demoSyllabus);
+        setProfile(demoProfile);
         setSchedule(result.blocks, result.warning);
+
+        // Store demo locally so user has immediate offline access
+        try {
+          const stored = await saveTimetableLocally(demoSyllabus, demoProfile, result.blocks);
+          setActiveTimetableId(stored.id);
+        } catch {}
       })();
     }
   }, []);
@@ -572,17 +634,65 @@ export default function DashboardPage() {
   const monthStart = startOfMonth(currentDate);
 
   const headerLabel =
-    view === 'day' ? format(currentDate, 'EEEE, MMMM d, yyyy') :
-    view === 'week' ? `Week of ${format(weekStart, 'MMM d')} – ${format(addDays(weekStart, 6), 'MMM d, yyyy')}` :
+    view === 'day' ? format(currentDate, isMobile ? 'EEE, MMM d' : 'EEEE, MMMM d, yyyy') :
+    view === 'week' ? `${format(weekStart, 'MMM d')} – ${format(addDays(weekStart, 6), 'MMM d')}` :
     format(monthStart, 'MMMM yyyy');
 
   const handleExport = async () => {
     if (!syllabus || !profile) return;
     setExporting(true);
     try {
-      await exportToPDF({ syllabus, profile, blocks: schedule, elementId: 'schedule-capture' });
+      const result = await exportToPDF({ syllabus, profile, blocks: schedule });
+      if (result.success) {
+        setPdfDataUri(result.dataUri);
+        setExportToast('✅ PDF exported and stored locally on your device!');
+        setTimeout(() => setExportToast(null), 4000);
+      } else {
+        setExportToast(`⚠️ Export error: ${result.error || 'Failed to download'}`);
+        setTimeout(() => setExportToast(null), 5000);
+      }
+    } catch (err: any) {
+      console.error('Export error:', err);
+      setExportToast('⚠️ Export failed. Check storage or try View PDF.');
+      setTimeout(() => setExportToast(null), 5000);
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleViewPdf = async () => {
+    if (!syllabus || !profile) return;
+    if (pdfDataUri) {
+      setPdfModalOpen(true);
+      return;
+    }
+    setExporting(true);
+    try {
+      const { dataUri } = generatePDFData({ syllabus, profile, blocks: schedule });
+      setPdfDataUri(dataUri);
+      setPdfModalOpen(true);
+      if (activeTimetableId) {
+        updateStoredTimetablePDF(activeTimetableId, dataUri);
+      }
+    } catch (err) {
+      console.error('PDF preview error:', err);
+      setExportToast('⚠️ Could not generate PDF preview.');
+      setTimeout(() => setExportToast(null), 4000);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleSelectTimetable = async (id: string) => {
+    const item = await getStoredTimetable(id);
+    if (item) {
+      setSyllabus(item.syllabus);
+      setProfile(item.profile);
+      setSchedule(item.blocks, null);
+      setActiveTimetableId(item.id);
+      if (item.pdfDataUri) setPdfDataUri(item.pdfDataUri);
+      setExportToast(`Loaded "${item.title}"`);
+      setTimeout(() => setExportToast(null), 3000);
     }
   };
 
@@ -595,6 +705,9 @@ export default function DashboardPage() {
         `✅ Reshuffled ${result.reshuffledCount} task${result.reshuffledCount !== 1 ? 's' : ''} to future slots.` +
         (result.couldNotFitCount > 0 ? ` ⚠️ ${result.couldNotFitCount} couldn't fit — extend your horizon.` : ''),
       );
+      if (activeTimetableId) {
+        updateStoredTimetableBlocks(activeTimetableId, schedule);
+      }
     }
     setTimeout(() => setReshuffleMsg(null), 4000);
   };
@@ -603,13 +716,23 @@ export default function DashboardPage() {
     markBlock(id, status);
     // Update selectedBlock so the modal reflects the new status immediately
     setSelectedBlock(prev => prev?.id === id ? { ...prev, status } : prev);
-  }, [markBlock]);
+    if (activeTimetableId) {
+      const updated = schedule.map(b => b.id === id && b.type === 'study' ? { ...b, status } : b);
+      updateStoredTimetableBlocks(activeTimetableId, updated);
+    }
+  }, [markBlock, activeTimetableId, schedule]);
 
   // Stats
   const studyBlocks = schedule.filter((b) => b.type === 'study');
   const totalStudyMin = studyBlocks.reduce((acc, b) => acc + toMin(b.endTime) - toMin(b.startTime), 0);
   const pendingCount = studyBlocks.filter(b => b.status === 'pending').length;
   const completedCount = studyBlocks.filter(b => b.status === 'completed').length;
+
+  const sidebarResult = syllabus ? {
+    syllabus,
+    netStudyHoursPerDay: (totalStudyMin / 60) / Math.max(1, [...new Set(schedule.map(b => b.date))].length),
+    coveragePercent: syllabus ? Math.min(100, (totalStudyMin / 60 / syllabus.totalHours) * 100) : 0,
+  } : null;
 
   return (
     <main className="min-h-screen bg-[#09090f] overflow-hidden">
@@ -623,35 +746,56 @@ export default function DashboardPage() {
         />
       )}
 
+      {/* Mobile Stats Sheet backdrop */}
+      {statsOpen && (
+        <div
+          className="fixed inset-0 z-[55] mobile-only"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setStatsOpen(false)}
+        />
+      )}
+
+      {/* Mobile Stats Sheet */}
+      <div className={`mobile-stats-sheet ${statsOpen ? 'open' : ''}`}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-bold text-base">Dashboard Stats</h2>
+          <button onClick={() => setStatsOpen(false)} className="text-[#555] hover:text-white">
+            <X size={18} />
+          </button>
+        </div>
+        <HealthSidebar profile={profile} schedule={schedule} result={sidebarResult} />
+      </div>
+
       {/* Nav */}
-      <nav className="flex items-center justify-between px-6 py-4 border-b border-[rgba(255,255,255,0.06)] bg-[#0d0d1a]">
+      <nav className="flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-[rgba(255,255,255,0.06)] bg-[#0d0d1a]">
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent flex items-center justify-center flex-shrink-0">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold">StudySync <span className="gradient-text">AI</span></span>
+          <span className="font-bold hidden xs:block">StudySync <span className="gradient-text">AI</span></span>
         </Link>
 
-        <div className="flex items-center gap-2">
-          {/* Reshuffle pending button */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Reshuffle pending button — icon-only on mobile */}
           {pendingCount > 0 && (
             <button
               onClick={handleReshuffle}
               className="btn btn-secondary flex items-center gap-1.5"
               style={{ borderColor: '#f59e0b55', color: '#f59e0b' }}
             >
-              <RefreshCw className="w-4 h-4" />
-              Reshuffle {pendingCount} Pending
+              <RefreshCw className="w-4 h-4 flex-shrink-0" />
+              <span className="hidden sm:inline">Reshuffle {pendingCount} Pending</span>
+              <span className="sm:hidden text-xs">{pendingCount}</span>
             </button>
           )}
 
-          {/* View Toggle */}
-          <div className="glass flex rounded-lg overflow-hidden p-0.5 gap-0.5">
+          {/* View Toggle — desktop only */}
+          <div className="glass-flex rounded-lg overflow-hidden p-0.5 gap-0.5 desktop-only flex">
             {(['day', 'week', 'month'] as ViewMode[]).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-all capitalize ${
+                className={`px-3 sm:px-4 py-1.5 rounded-md text-sm font-semibold transition-all capitalize ${
                   view === v ? 'bg-primary-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.5)]' : 'text-[#888baa] hover:text-white'
                 }`}
               >
@@ -660,52 +804,93 @@ export default function DashboardPage() {
             ))}
           </div>
 
-          <button onClick={handleExport} disabled={exporting} className="btn btn-primary">
-            {exporting ? <><Clock className="w-4 h-4 animate-spin" /> Exporting…</> : <><Download className="w-4 h-4" /> Export PDF</>}
+          {/* History — with count badge */}
+          <button
+            onClick={() => setSavedModalOpen(true)}
+            className="btn btn-secondary px-2 sm:px-3 text-xs sm:text-sm flex items-center gap-1.5"
+            title="Timetable history on this device"
+          >
+            <History className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+            <span className="hidden sm:inline">History</span>
+            {savedCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
+                {savedCount}
+              </span>
+            )}
           </button>
 
+          {/* View In-App PDF — access without exporting */}
+          <button
+            onClick={handleViewPdf}
+            disabled={exporting}
+            className="btn btn-secondary px-2 sm:px-3 text-xs sm:text-sm flex items-center gap-1.5"
+            title="View PDF directly in app without exporting"
+          >
+            <Eye className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span className="hidden sm:inline">View PDF</span>
+          </button>
+
+          {/* Export PDF */}
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="btn btn-primary px-2 sm:px-3.5 text-xs sm:text-sm flex items-center gap-1.5"
+            title="Download PDF document"
+          >
+            {exporting
+              ? <Clock className="w-4 h-4 animate-spin flex-shrink-0" />
+              : <Download className="w-4 h-4 flex-shrink-0" />}
+            <span className="hidden sm:inline">{exporting ? 'Exporting…' : 'Export PDF'}</span>
+          </button>
+
+          {/* Regenerate */}
           <Link href="/questionnaire">
-            <button className="btn btn-secondary">
-              <RotateCcw className="w-4 h-4" /> Regenerate
+            <button className="btn btn-secondary px-2 sm:px-3 text-xs sm:text-sm" title="Re-answer questions">
+              <RotateCcw className="w-4 h-4 flex-shrink-0" />
+              <span className="hidden lg:inline">Regenerate</span>
             </button>
           </Link>
         </div>
       </nav>
 
+      {/* Storage & Export feedback toast */}
+      {exportToast && (
+        <div className="fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-[60] px-4 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-semibold shadow-2xl flex items-center gap-2 border border-emerald-500/30 bg-[#0d1f18] text-emerald-300 animate-in fade-in slide-in-from-top-4">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <span>{exportToast}</span>
+        </div>
+      )}
+
       {/* Reshuffle feedback toast */}
       {reshuffleMsg && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold shadow-xl"
+        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 sm:px-5 py-3 rounded-xl text-xs sm:text-sm font-semibold shadow-xl w-[90vw] sm:w-auto text-center"
           style={{ background: '#151522', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}>
           {reshuffleMsg}
         </div>
       )}
 
-      <div className="flex h-[calc(100vh-65px)]">
-        {/* Sidebar */}
+      <div className="flex h-[calc(100vh-57px)] sm:h-[calc(100vh-65px)]">
+        {/* Sidebar — desktop only */}
         <aside className="w-56 flex-shrink-0 border-r border-[rgba(255,255,255,0.06)] p-4 overflow-y-auto bg-[#0d0d1a] hidden lg:block">
           <HealthSidebar
             profile={profile}
             schedule={schedule}
-            result={syllabus ? {
-              syllabus,
-              netStudyHoursPerDay: (totalStudyMin / 60) / Math.max(1, [...new Set(schedule.map(b => b.date))].length),
-              coveragePercent: syllabus ? Math.min(100, (totalStudyMin / 60 / syllabus.totalHours) * 100) : 0,
-            } : null}
+            result={sidebarResult}
           />
         </aside>
 
         {/* Main calendar */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden dashboard-content-area">
           {/* Warning banner */}
           {warning && (
-            <div className="warning-banner mx-4 mt-3 flex items-start gap-2">
+            <div className="warning-banner mx-3 sm:mx-4 mt-2 sm:mt-3 flex items-start gap-2 text-xs sm:text-sm">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>{warning}</span>
             </div>
           )}
 
-          {/* Legend */}
-          <div className="flex items-center gap-4 px-6 pt-2 text-[10px] text-[#555]">
+          {/* Legend — desktop only */}
+          <div className="desktop-only flex items-center gap-4 px-6 pt-2 text-[10px] text-[#555]">
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block" /> Completed (faded)</span>
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Pending → Reshuffle</span>
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-indigo-500/40 inline-block" /> Upcoming</span>
@@ -713,41 +898,49 @@ export default function DashboardPage() {
           </div>
 
           {/* Calendar header */}
-          <div className="flex items-center gap-4 px-6 py-3 border-b border-[rgba(255,255,255,0.06)]">
-            <button onClick={() => navigate(-1)} className="btn btn-ghost p-2">
+          <div className="flex items-center gap-2 sm:gap-4 px-3 sm:px-6 py-2 sm:py-3 border-b border-[rgba(255,255,255,0.06)]">
+            <button onClick={() => navigate(-1)} className="btn btn-ghost p-1.5 sm:p-2">
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <button onClick={() => setCurrentDate(new Date())} className="btn btn-secondary text-xs px-3 py-1.5">
+            <button onClick={() => setCurrentDate(new Date())} className="btn btn-secondary text-xs px-2 sm:px-3 py-1 sm:py-1.5">
               Today
             </button>
-            <button onClick={() => navigate(1)} className="btn btn-ghost p-2">
+            <button onClick={() => navigate(1)} className="btn btn-ghost p-1.5 sm:p-2">
               <ChevronRight className="w-4 h-4" />
             </button>
-            <h2 className="font-bold text-base">{headerLabel}</h2>
+            <h2 className="font-bold text-sm sm:text-base">{headerLabel}</h2>
 
-            <div className="ml-auto flex items-center gap-3 text-xs text-[#666]">
-              <span className="flex items-center gap-1"><BookOpen className="w-3 h-3 text-primary-400" /> {studyBlocks.length} blocks</span>
-              <span className="flex items-center gap-1 text-green-400"><CheckCircle2 className="w-3 h-3" /> {completedCount} done</span>
-              {pendingCount > 0 && <span className="flex items-center gap-1 text-amber-400"><XCircle className="w-3 h-3" /> {pendingCount} pending</span>}
-              <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-green-400" /> {(totalStudyMin / 60).toFixed(1)}h</span>
+            <div className="ml-auto flex items-center gap-2 sm:gap-3 text-xs text-[#666]">
+              <span className="flex items-center gap-1">
+                <BookOpen className="w-3 h-3 text-primary-400" />
+                <span className="hidden xs:inline">{studyBlocks.length} blocks</span>
+                <span className="xs:hidden">{studyBlocks.length}</span>
+              </span>
+              <span className="hidden sm:flex items-center gap-1 text-green-400">
+                <CheckCircle2 className="w-3 h-3" /> {completedCount} done
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3 text-green-400" />
+                {(totalStudyMin / 60).toFixed(1)}h
+              </span>
             </div>
           </div>
 
           {/* Calendar body */}
-          <div id="schedule-capture" ref={dashboardRef} className="flex-1 overflow-auto px-4 py-2">
+          <div id="schedule-capture" ref={dashboardRef} className="flex-1 overflow-auto px-2 sm:px-4 py-2">
             {view === 'day' && (
-              <DayView date={currentDate} blocks={schedule} syllabus={syllabus} onBlockClick={setSelectedBlock} />
+              <DayView date={currentDate} blocks={schedule} syllabus={syllabus} onBlockClick={setSelectedBlock} isMobile={isMobile} />
             )}
             {view === 'week' && (
-              <WeekView weekStart={weekStart} blocks={schedule} syllabus={syllabus} onBlockClick={setSelectedBlock} />
+              <WeekView weekStart={weekStart} blocks={schedule} syllabus={syllabus} onBlockClick={setSelectedBlock} isMobile={isMobile} />
             )}
             {view === 'month' && (
-              <MonthView monthStart={monthStart} blocks={schedule} onBlockClick={setSelectedBlock} />
+              <MonthView monthStart={monthStart} blocks={schedule} onBlockClick={setSelectedBlock} isMobile={isMobile} />
             )}
           </div>
 
-          {/* Stats footer */}
-          <div className="border-t border-[rgba(255,255,255,0.06)] px-6 py-2 bg-[#0d0d1a] flex flex-wrap gap-4 text-xs text-[#666]">
+          {/* Stats footer — desktop only */}
+          <div className="desktop-only border-t border-[rgba(255,255,255,0.06)] px-6 py-2 bg-[#0d0d1a] flex flex-wrap gap-4 text-xs text-[#666]">
             {syllabus && (
               <>
                 <span>📚 <strong className="text-white">{syllabus.title.slice(0, 40)}…</strong></span>
@@ -759,6 +952,68 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ─── Mobile Bottom Tab Bar ─────────────────────────────────────── */}
+      <div className="mobile-bottom-tabs">
+        {(['day', 'week', 'month'] as ViewMode[]).map((v) => {
+          const icons = { day: '📅', week: '📆', month: '🗓' };
+          const labels = { day: 'Day', week: 'Week', month: 'Month' };
+          return (
+            <button
+              key={v}
+              className={`mobile-tab-btn ${view === v ? 'active' : ''}`}
+              onClick={() => { setView(v); setStatsOpen(false); }}
+            >
+              <span className="text-lg leading-none">{icons[v]}</span>
+              <span>{labels[v]}</span>
+            </button>
+          );
+        })}
+        <button
+          className={`mobile-tab-btn ${statsOpen ? 'active' : ''}`}
+          onClick={() => setStatsOpen(!statsOpen)}
+        >
+          <BarChart2 size={18} />
+          <span>Stats</span>
+        </button>
+        <button
+          className="mobile-tab-btn"
+          onClick={handleViewPdf}
+          title="View PDF"
+        >
+          <Eye size={18} />
+          <span>PDF</span>
+        </button>
+        <button
+          className="mobile-tab-btn"
+          onClick={() => setSavedModalOpen(true)}
+          title="Timetable History"
+        >
+          <History size={18} />
+          <span>History</span>
+        </button>
+      </div>
+
+      {/* In-App PDF Viewer Modal */}
+      <InAppPdfModal
+        isOpen={pdfModalOpen}
+        onClose={() => setPdfModalOpen(false)}
+        pdfDataUri={pdfDataUri}
+        title={syllabus?.title || 'Personalized Timetable'}
+        onDownload={handleExport}
+      />
+
+      {/* Saved Timetables Manager Modal */}
+      <SavedTimetablesModal
+        isOpen={savedModalOpen}
+        onClose={() => setSavedModalOpen(false)}
+        onSelectTimetable={handleSelectTimetable}
+        onViewPdf={(dataUri) => {
+          setPdfDataUri(dataUri);
+          setPdfModalOpen(true);
+        }}
+        currentActiveId={activeTimetableId}
+      />
     </main>
   );
 }

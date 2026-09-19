@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/store/appStore';
 import { AvailabilityProfile, TimeWindow, DayOfWeek, SessionLength, PeakEnergy, Occupation } from '@/lib/types';
 import { generateSchedule } from '@/lib/scheduler';
+import { saveTimetableLocally } from '@/lib/localTimetableStorage';
+import { generatePDFData } from '@/lib/pdfExport';
 import Link from 'next/link';
 import {
   Sparkles, ChevronRight, ChevronLeft, Briefcase, Clock, UtensilsCrossed,
@@ -75,7 +77,7 @@ function OccupationStep({ profile, onChange }: { profile: AvailabilityProfile; o
   return (
     <div className="space-y-4 animate-fadeIn">
       <div>
-        <h2 className="text-2xl font-bold mb-1">What's your current status?</h2>
+        <h2 className="text-xl sm:text-2xl font-bold mb-1">What's your current status?</h2>
         <p className="text-[#888baa] text-sm">This helps us understand your daily structure.</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -91,7 +93,7 @@ function OccupationStep({ profile, onChange }: { profile: AvailabilityProfile; o
               checked={profile.occupation === o.value}
               onChange={() => onChange({ occupation: o.value })}
             />
-            <span className="text-3xl">{o.icon}</span>
+            <span className="text-2xl sm:text-3xl">{o.icon}</span>
             <div>
               <p className="font-semibold text-sm">{o.label}</p>
               <p className="text-xs text-[#888baa]">{o.desc}</p>
@@ -125,7 +127,7 @@ function CommitmentsStep({ profile, onChange }: { profile: AvailabilityProfile; 
   return (
     <div className="space-y-5 animate-fadeIn">
       <div>
-        <h2 className="text-2xl font-bold mb-1">Fixed Commitments</h2>
+        <h2 className="text-xl sm:text-2xl font-bold mb-1">Fixed Commitments</h2>
         <p className="text-[#888baa] text-sm">Blocks of time you can't study (classes, work, etc.)</p>
       </div>
 
@@ -160,7 +162,7 @@ function CommitmentsStep({ profile, onChange }: { profile: AvailabilityProfile; 
           </div>
           <div>
             <Label>Days</Label>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5 sm:gap-2">
               {DAYS.map((d) => {
                 const selected = (c.days ?? DAYS).includes(d);
                 return (
@@ -172,7 +174,7 @@ function CommitmentsStep({ profile, onChange }: { profile: AvailabilityProfile; 
                         : [...(c.days ?? DAYS), d];
                       updateCommitment(i, { days });
                     }}
-                    className={`px-3 py-1 rounded-md text-xs font-semibold border transition-all ${
+                    className={`px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold border transition-all ${
                       selected ? 'bg-primary-500 border-primary-500 text-white' : 'border-[rgba(99,102,241,0.18)] text-[#888baa]'
                     }`}
                   >
@@ -212,7 +214,7 @@ function HealthStep({ profile, onChange }: { profile: AvailabilityProfile; onCha
   return (
     <div className="space-y-5 animate-fadeIn">
       <div>
-        <h2 className="text-2xl font-bold mb-1">Health & Routine</h2>
+        <h2 className="text-xl sm:text-2xl font-bold mb-1">Health & Routine</h2>
         <p className="text-[#888baa] text-sm">Your timetable will never overlap these — they're sacred.</p>
       </div>
 
@@ -256,25 +258,28 @@ function HealthStep({ profile, onChange }: { profile: AvailabilityProfile; onCha
           { label: '🥗 Lunch', key: 'lunch' as const, durKey: 'lunchDuration' as const },
           { label: '🍽️ Dinner', key: 'dinner' as const, durKey: 'dinnerDuration' as const },
         ].map((m) => (
-          <div key={m.key} className="grid grid-cols-3 gap-2 items-end">
-            <div>
-              <Label>{m.label}</Label>
-              <input
-                type="time" className="input"
-                value={profile.meals[m.key]}
-                onChange={(e) => onChange({ meals: { ...profile.meals, [m.key]: e.target.value } })}
-              />
-            </div>
-            <div className="col-span-2">
-              <Label>Duration (min)</Label>
-              <div className="flex items-center gap-2">
+          <div key={m.key} className="space-y-2">
+            <Label>{m.label}</Label>
+            {/* Stack on mobile, side-by-side on sm+ */}
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+              <div className="flex-shrink-0">
                 <input
-                  type="range" min={10} max={60} step={5}
-                  value={profile.meals[m.durKey]}
-                  onChange={(e) => onChange({ meals: { ...profile.meals, [m.durKey]: +e.target.value } })}
-                  className="flex-1 accent-green-500"
+                  type="time" className="input sm:w-32"
+                  value={profile.meals[m.key]}
+                  onChange={(e) => onChange({ meals: { ...profile.meals, [m.key]: e.target.value } })}
                 />
-                <span className="text-xs text-[#888baa] w-10">{profile.meals[m.durKey]}m</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-[#888baa] mb-1">Duration (min)</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range" min={10} max={60} step={5}
+                    value={profile.meals[m.durKey]}
+                    onChange={(e) => onChange({ meals: { ...profile.meals, [m.durKey]: +e.target.value } })}
+                    className="flex-1 accent-green-500"
+                  />
+                  <span className="text-xs text-[#888baa] w-10 flex-shrink-0">{profile.meals[m.durKey]}m</span>
+                </div>
               </div>
             </div>
           </div>
@@ -285,39 +290,45 @@ function HealthStep({ profile, onChange }: { profile: AvailabilityProfile; onCha
       <div className="card p-4 space-y-2">
         <Label>🚿 Hygiene / Routine Slots</Label>
         {profile.hygieneSlots.map((slot, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              className="input w-28" type="time" value={slot.start}
-              onChange={(e) => {
-                const h = [...profile.hygieneSlots];
-                h[i] = { ...h[i], start: e.target.value };
-                onChange({ hygieneSlots: h });
-              }}
-            />
-            <span className="text-[#666]">→</span>
-            <input
-              className="input w-28" type="time" value={slot.end}
-              onChange={(e) => {
-                const h = [...profile.hygieneSlots];
-                h[i] = { ...h[i], end: e.target.value };
-                onChange({ hygieneSlots: h });
-              }}
-            />
-            <input
-              className="input flex-1" placeholder="Label"
-              value={slot.label ?? ''}
-              onChange={(e) => {
-                const h = [...profile.hygieneSlots];
-                h[i] = { ...h[i], label: e.target.value };
-                onChange({ hygieneSlots: h });
-              }}
-            />
-            <button
-              onClick={() => onChange({ hygieneSlots: profile.hygieneSlots.filter((_, j) => j !== i) })}
-              className="btn btn-ghost text-red-400 px-2"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+          <div key={i} className="flex flex-col xs:flex-row items-start xs:items-center gap-2">
+            {/* Time range row */}
+            <div className="flex items-center gap-2 w-full xs:w-auto">
+              <input
+                className="input flex-1 xs:w-24 min-w-0" type="time" value={slot.start}
+                onChange={(e) => {
+                  const h = [...profile.hygieneSlots];
+                  h[i] = { ...h[i], start: e.target.value };
+                  onChange({ hygieneSlots: h });
+                }}
+              />
+              <span className="text-[#666] flex-shrink-0">→</span>
+              <input
+                className="input flex-1 xs:w-24 min-w-0" type="time" value={slot.end}
+                onChange={(e) => {
+                  const h = [...profile.hygieneSlots];
+                  h[i] = { ...h[i], end: e.target.value };
+                  onChange({ hygieneSlots: h });
+                }}
+              />
+            </div>
+            {/* Label + delete */}
+            <div className="flex items-center gap-2 w-full xs:flex-1">
+              <input
+                className="input flex-1" placeholder="Label"
+                value={slot.label ?? ''}
+                onChange={(e) => {
+                  const h = [...profile.hygieneSlots];
+                  h[i] = { ...h[i], label: e.target.value };
+                  onChange({ hygieneSlots: h });
+                }}
+              />
+              <button
+                onClick={() => onChange({ hygieneSlots: profile.hygieneSlots.filter((_, j) => j !== i) })}
+                className="btn btn-ghost text-red-400 px-2 flex-shrink-0"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         ))}
         <button
@@ -337,7 +348,7 @@ function ProductivityStep({ profile, onChange }: { profile: AvailabilityProfile;
   return (
     <div className="space-y-5 animate-fadeIn">
       <div>
-        <h2 className="text-2xl font-bold mb-1">Productivity Profile</h2>
+        <h2 className="text-xl sm:text-2xl font-bold mb-1">Productivity Profile</h2>
         <p className="text-[#888baa] text-sm">We'll match your hardest topics to your best hours.</p>
       </div>
 
@@ -355,7 +366,7 @@ function ProductivityStep({ profile, onChange }: { profile: AvailabilityProfile;
                 onChange={() => onChange({ sessionLength: s.value })}
               />
               <div>
-                <p className="font-bold">{s.label}</p>
+                <p className="font-bold text-sm sm:text-base">{s.label}</p>
                 <p className="text-xs text-[#888baa]">{s.desc}</p>
               </div>
             </label>
@@ -376,7 +387,7 @@ function ProductivityStep({ profile, onChange }: { profile: AvailabilityProfile;
                 checked={profile.peakEnergy === p.value}
                 onChange={() => onChange({ peakEnergy: p.value })}
               />
-              <span className="text-2xl">{p.icon}</span>
+              <span className="text-xl sm:text-2xl">{p.icon}</span>
               <div>
                 <p className="font-semibold text-sm">{p.label}</p>
                 <p className="text-xs text-[#888baa]">{p.desc}</p>
@@ -417,7 +428,7 @@ function HorizonStep({ profile, onChange }: { profile: AvailabilityProfile; onCh
   return (
     <div className="space-y-5 animate-fadeIn">
       <div>
-        <h2 className="text-2xl font-bold mb-1">Schedule Horizon</h2>
+        <h2 className="text-xl sm:text-2xl font-bold mb-1">Schedule Horizon</h2>
         <p className="text-[#888baa] text-sm">How far should your timetable extend?</p>
       </div>
 
@@ -426,7 +437,7 @@ function HorizonStep({ profile, onChange }: { profile: AvailabilityProfile; onCh
           <button
             key={p.days}
             onClick={() => onChange({ horizonDays: p.days })}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold border transition-all ${
+            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-semibold border transition-all ${
               profile.horizonDays === p.days
                 ? 'bg-primary-500 border-primary-500 text-white shadow-[0_0_16px_rgba(99,102,241,0.5)]'
                 : 'border-[rgba(99,102,241,0.18)] text-[#888baa] hover:border-primary-500'
@@ -491,6 +502,18 @@ export default function QuestionnairePage() {
       setSchedule(result.blocks, result.warning);
       setWarning(result.warning);
       setStep(3);
+
+      // Auto-save locally on user's device & pre-generate PDF for instant in-app access
+      try {
+        const { dataUri } = generatePDFData({ syllabus, profile, blocks: result.blocks });
+        await saveTimetableLocally(syllabus, profile, result.blocks, dataUri);
+      } catch (saveErr) {
+        console.warn('[Questionnaire] Local timetable save warning:', saveErr);
+        try {
+          await saveTimetableLocally(syllabus, profile, result.blocks);
+        } catch {}
+      }
+
       router.push('/dashboard');
     } finally {
       setLocalGenerating(false);
@@ -507,31 +530,33 @@ export default function QuestionnairePage() {
   ];
 
   return (
-    <main className="animated-bg min-h-screen">
-      <div className="orb orb-accent w-[400px] h-[400px] top-[-80px] left-[-80px]" />
-      <div className="orb orb-pink w-[300px] h-[300px] bottom-[80px] right-[-60px]" />
+    <main className="animated-bg min-h-screen overflow-x-hidden">
+      <div className="orb orb-accent w-[200px] h-[200px] sm:w-[400px] sm:h-[400px] top-[-60px] left-[-60px]" />
+      <div className="orb orb-pink w-[150px] h-[150px] sm:w-[300px] sm:h-[300px] bottom-[80px] right-[-50px]" />
 
       {/* Nav */}
-      <nav className="relative z-10 flex items-center justify-between px-6 py-4 max-w-3xl mx-auto">
+      <nav className="relative z-10 flex items-center justify-between px-4 sm:px-6 py-4 max-w-3xl mx-auto">
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent flex items-center justify-center flex-shrink-0">
             <Sparkles className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-lg">StudySync <span className="gradient-text">AI</span></span>
+          <span className="font-bold text-base sm:text-lg">
+            StudySync <span className="gradient-text">AI</span>
+          </span>
         </Link>
         <span className="badge badge-primary">Step 2 of 2</span>
       </nav>
 
-      <div className="relative z-10 max-w-3xl mx-auto px-6 py-8">
+      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Step Indicator */}
-        <div className="flex items-center mb-10">
+        <div className="flex items-center mb-8 sm:mb-10">
           {STEP_LABELS.map((label, i) => (
             <div key={label} className="flex items-center flex-1 last:flex-none">
               <div className="flex flex-col items-center gap-1">
                 <div className={`step-dot ${i < step ? 'done' : i === step ? 'active' : 'pending'}`}>
-                  {i < step ? <Check className="w-4 h-4" /> : i + 1}
+                  {i < step ? <Check className="w-3 h-3 sm:w-4 sm:h-4" /> : i + 1}
                 </div>
-                <span className={`text-xs hidden sm:block ${i === step ? 'text-primary-400 font-semibold' : 'text-[#555]'}`}>
+                <span className={`text-[10px] sm:text-xs hidden sm:block ${i === step ? 'text-primary-400 font-semibold' : 'text-[#555]'}`}>
                   {label}
                 </span>
               </div>
@@ -543,7 +568,7 @@ export default function QuestionnairePage() {
         </div>
 
         {/* Step Content */}
-        <div className="card p-6 mb-6 min-h-[400px]">
+        <div className="card p-4 sm:p-6 mb-5 sm:mb-6 min-h-[320px] sm:min-h-[400px]">
           {stepComponents[step]}
         </div>
 
@@ -569,9 +594,9 @@ export default function QuestionnairePage() {
               className="btn btn-primary btn-lg glow-primary disabled:opacity-60"
             >
               {generating ? (
-                <><Loader2 className="w-5 h-5 animate-spin" /> Generating…</>
+                <><Loader2 className="w-5 h-5 animate-spin flex-shrink-0" /> Generating…</>
               ) : (
-                <><Calendar className="w-5 h-5" /> Generate Timetable</>
+                <><Calendar className="w-5 h-5 flex-shrink-0" /> Generate Timetable</>
               )}
             </button>
           )}

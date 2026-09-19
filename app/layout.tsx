@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 
@@ -13,6 +13,14 @@ export const metadata: Metadata = {
   description:
     'Upload your syllabus, answer a quick lifestyle questionnaire, and get a personalized health-first study timetable. Export as PDF.',
   keywords: ['study timetable', 'AI scheduler', 'health-first', 'syllabus planner'],
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: '#09090f',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
