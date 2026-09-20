@@ -3,7 +3,7 @@
   publish = ".next"
 
 [build.environment]
-  NEXT_PUBLIC_USE_MOCK_AI = "true"
+  NEXT_PUBLIC_USE_MOCK_AI = "false"
   # SQLite is disabled on Netlify (serverless env)
   DISABLE_SQLITE = "true"
 
