@@ -185,34 +185,32 @@ export function generateSchedule(
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // Sort items: hard first (gets best peak slots), then medium, then easy
-  const complexityOrder = { hard: 0, medium: 1, easy: 2 };
-  const sortedItems = [...syllabus.items].sort(
-    (a, b) => complexityOrder[a.complexity] - complexityOrder[b.complexity],
-  );
-
-  // Queue: each item broken into sessionLength-sized chunks
-  interface StudyChunk {
+  // 1. Maintain pedagogical chapterwise order (Chapter 1 -> Chapter 2 -> Chapter 3)
+  // Each chapter item tracks its remaining study minutes and its specific subtopics
+  interface ChapterProgress {
     item: SyllabusItem;
     remainingMin: number;
+    subTopics: string[];
+    subTopicIdx: number;
+    revisionScheduled: boolean;
   }
 
-  const queue: StudyChunk[] = sortedItems.map((item) => ({
+  const queue: ChapterProgress[] = syllabus.items.map((item) => ({
     item,
     remainingMin: Math.round(item.estimatedHours * 60),
+    subTopics: item.subTopics && item.subTopics.length > 0 ? item.subTopics : ['Core Concepts & Practice'],
+    subTopicIdx: 0,
+    revisionScheduled: false,
   }));
 
   let queueIdx = 0;
   let totalScheduledMin = 0;
-
-  const blockedMap = buildBlockedMap(profile);
-  const freeSlots = findFreeSlots(blockedMap, profile);
-
-  // Net study time per day (minutes)
-  let netMinPerDay = 0;
-  for (const s of freeSlots) netMinPerDay += s.durationMin;
-  // Subtract break time: every sessionLength block needs a break after
   const breakCost = profile.breakBetweenSessions;
+
+  const canonicalMap = buildBlockedMap(profile);
+  const canonicalSlots = findFreeSlots(canonicalMap, profile);
+  let netMinPerDay = 0;
+  for (const s of canonicalSlots) netMinPerDay += s.durationMin;
 
   for (let dayOffset = 0; dayOffset < profile.horizonDays; dayOffset++) {
     const date = format(addDays(today, dayOffset), 'yyyy-MM-dd');
@@ -225,7 +223,6 @@ export function generateSchedule(
     const wakeMin = toMin(profile.wakeTime);
     if (bedMin > wakeMin) {
       blocks.push(makeBlock(date, bedMin, 1440 - bedMin, 'sleep', '😴 Sleep', BLOCK_COLORS.sleep));
-      // next day's sleep handled when dayOffset+1 comes
     } else {
       blocks.push(makeBlock(date, bedMin, profile.sleepHours * 60, 'sleep', '😴 Sleep', BLOCK_COLORS.sleep));
     }
@@ -251,15 +248,16 @@ export function generateSchedule(
       }
     });
 
-    // Fill free slots with study chunks
-    const dayFreeSlots = findFreeSlots(dayMap, profile);
+    // Fill free slots with study chunks in chronological time order
+    const dayFreeSlots = findFreeSlots(dayMap, profile).sort((a, b) => a.startMin - b.startMin);
     for (const slot of dayFreeSlots) {
       let cursor = slot.startMin;
       const slotEnd = slot.startMin + slot.durationMin;
       let firstBlock = true;
 
       while (cursor < slotEnd && queueIdx < queue.length) {
-        const chunk = queue[queueIdx];
+        const currentChapter = queue[queueIdx];
+
         if (!firstBlock) {
           // Insert break
           if (cursor + breakCost > slotEnd) break;
@@ -269,8 +267,18 @@ export function generateSchedule(
         firstBlock = false;
 
         const available = slotEnd - cursor;
-        const sessionMins = Math.min(profile.sessionLength, chunk.remainingMin, available);
-        if (sessionMins < 15) break; // too short to be useful
+        const sessionMins = Math.min(profile.sessionLength, currentChapter.remainingMin, available);
+        if (sessionMins < 15) break;
+
+        // Label with chapter + current subtopic
+        const subTopic = currentChapter.subTopics[currentChapter.subTopicIdx % currentChapter.subTopics.length];
+        const isNearCompletion = currentChapter.remainingMin <= profile.sessionLength * 1.5;
+
+        let sessionLabel = `📚 ${currentChapter.item.chapter}: ${subTopic}`;
+        if (isNearCompletion && !currentChapter.revisionScheduled && currentChapter.subTopics.length > 1) {
+          sessionLabel = `📝 ${currentChapter.item.chapter}: Chapter Revision & Practice`;
+          currentChapter.revisionScheduled = true;
+        }
 
         blocks.push(
           makeBlock(
@@ -278,16 +286,20 @@ export function generateSchedule(
             cursor,
             sessionMins,
             'study',
-            `📚 ${chunk.item.subject}: ${chunk.item.chapter}`,
-            chunk.item.color,
-            chunk.item.id,
+            sessionLabel,
+            currentChapter.item.color,
+            currentChapter.item.id,
           ),
         );
+
         cursor += sessionMins;
         totalScheduledMin += sessionMins;
-        chunk.remainingMin -= sessionMins;
+        currentChapter.remainingMin -= sessionMins;
+        currentChapter.subTopicIdx++;
 
-        if (chunk.remainingMin <= 0) queueIdx++;
+        if (currentChapter.remainingMin <= 0) {
+          queueIdx++;
+        }
       }
     }
   }

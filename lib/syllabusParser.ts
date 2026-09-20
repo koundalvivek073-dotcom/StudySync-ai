@@ -140,6 +140,80 @@ const MOCK_SYLLABI: ParsedSyllabus[] = [
       },
     ],
   },
+  {
+    id: 'demo_biology_12',
+    source: 'demo',
+    title: 'Senior Secondary Biology — Class 12 (CBSE 2025-26)',
+    totalHours: 140,
+    parseConfidence: 0.95,
+    items: [
+      {
+        id: 'bio1', subject: 'Biology', chapter: 'Chapter 1: Sexual Reproduction in Flowering Plants',
+        subTopics: ['Flower Structure & Pre-fertilization', 'Pollination & Pollen-Pistil Interaction', 'Double Fertilization', 'Endosperm & Embryo Development', 'Seeds, Fruits & Apomixis'],
+        complexity: 'medium', estimatedHours: 12, color: '#10b981', completed: 0,
+      },
+      {
+        id: 'bio2', subject: 'Biology', chapter: 'Chapter 2: Human Reproduction',
+        subTopics: ['Male & Female Reproductive Systems', 'Gametogenesis (Spermatogenesis & Oogenesis)', 'Menstrual Cycle & Hormonal Regulation', 'Fertilization, Implantation & Pregnancy', 'Parturition & Lactation'],
+        complexity: 'hard', estimatedHours: 14, color: '#10b981', completed: 0,
+      },
+      {
+        id: 'bio3', subject: 'Biology', chapter: 'Chapter 3: Reproductive Health',
+        subTopics: ['Population Stabilization & Contraceptive Methods', 'Medical Termination of Pregnancy (MTP)', 'Sexually Transmitted Infections (STIs)', 'Infertility & Assisted Reproductive Technologies (ART)'],
+        complexity: 'easy', estimatedHours: 8, color: '#10b981', completed: 0,
+      },
+      {
+        id: 'bio4', subject: 'Biology', chapter: 'Chapter 4: Principles of Inheritance & Variation',
+        subTopics: ['Mendelian Ratios & Deviations', 'Chromosomal Theory of Inheritance', 'Sex Determination & Linkage', 'Pedigree Analysis & Mendelian Disorders', 'Chromosomal Disorders (Down, Turner, Klinefelter)'],
+        complexity: 'hard', estimatedHours: 18, color: '#8b5cf6', completed: 0,
+      },
+      {
+        id: 'bio5', subject: 'Biology', chapter: 'Chapter 5: Molecular Basis of Inheritance',
+        subTopics: ['DNA as Genetic Material & Structure', 'DNA Packaging & Central Dogma', 'DNA Replication Mechanics', 'Transcription & RNA Processing', 'Genetic Code & Translation', 'Lac Operon & Human Genome Project', 'DNA Fingerprinting'],
+        complexity: 'hard', estimatedHours: 20, color: '#8b5cf6', completed: 0,
+      },
+      {
+        id: 'bio6', subject: 'Biology', chapter: 'Chapter 6: Evolution',
+        subTopics: ['Origin of Life & Geological Time Scale', 'Evidences for Evolution (Comparative Anatomy & Embryology)', 'Darwinism, Natural Selection & Hardy-Weinberg Principle', 'Adaptive Radiation & Human Evolution'],
+        complexity: 'medium', estimatedHours: 12, color: '#8b5cf6', completed: 0,
+      },
+      {
+        id: 'bio7', subject: 'Biology', chapter: 'Chapter 7: Human Health & Disease',
+        subTopics: ['Common Human Diseases (Typhoid, Malaria, Pneumonia)', 'Innate & Acquired Immunity, Antibodies', 'Vaccination, Allergies & Autoimmunity', 'AIDS (HIV Life Cycle) & Cancer', 'Drug & Alcohol Abuse Prevention'],
+        complexity: 'medium', estimatedHours: 14, color: '#f59e0b', completed: 0,
+      },
+      {
+        id: 'bio8', subject: 'Biology', chapter: 'Chapter 8: Microbes in Human Welfare',
+        subTopics: ['Microbes in Household Food Processing', 'Industrial Fermentation & Antibiotics', 'Biological Sewage Treatment (STP)', 'Biogas Production & Methanogens', 'Biocontrol Agents & Biofertilizers'],
+        complexity: 'easy', estimatedHours: 8, color: '#f59e0b', completed: 0,
+      },
+      {
+        id: 'bio9', subject: 'Biology', chapter: 'Chapter 9: Biotechnology — Principles & Processes',
+        subTopics: ['Genetic Engineering & Recombinant DNA', 'Restriction Enzymes & DNA Ligase', 'Cloning Vectors (pBR322, Ti Plasmid)', 'Polymerase Chain Reaction (PCR)', 'Bioreactors & Downstream Processing'],
+        complexity: 'hard', estimatedHours: 14, color: '#06b6d4', completed: 0,
+      },
+      {
+        id: 'bio10', subject: 'Biology', chapter: 'Chapter 10: Biotechnology and Its Applications',
+        subTopics: ['Genetically Modified Crops (Bt Cotton, RNAi)', 'Therapeutic Insulin Production in Bacteria', 'Gene Therapy (ADA Deficiency)', 'Transgenic Animals & Ethical Issues'],
+        complexity: 'medium', estimatedHours: 10, color: '#06b6d4', completed: 0,
+      },
+      {
+        id: 'bio11', subject: 'Biology', chapter: 'Chapter 11: Organisms and Populations',
+        subTopics: ['Major Abiotic Factors & Homeostasis', 'Physiological & Behavioral Adaptations', 'Population Attributes & Growth Models (Logistic vs Exponential)', 'Species Interactions (Mutualism, Parasitism, Competition)'],
+        complexity: 'medium', estimatedHours: 10, color: '#ec4899', completed: 0,
+      },
+      {
+        id: 'bio12', subject: 'Biology', chapter: 'Chapter 12: Ecosystem',
+        subTopics: ['Ecosystem Structure & Stratification', 'Primary & Secondary Productivity', 'Decomposition Stages & Factors', 'Energy Flow (10% Law)', 'Ecological Pyramids (Number, Biomass, Energy)'],
+        complexity: 'easy', estimatedHours: 8, color: '#ec4899', completed: 0,
+      },
+      {
+        id: 'bio13', subject: 'Biology', chapter: 'Chapter 13: Biodiversity and Conservation',
+        subTopics: ['Levels & Latitudinal Gradients of Biodiversity', 'The Evil Quartet (Habitat Loss, Over-exploitation)', 'Why We Must Conserve Biodiversity', 'In-Situ vs Ex-Situ Conservation Strategies'],
+        complexity: 'easy', estimatedHours: 8, color: '#ec4899', completed: 0,
+      },
+    ],
+  },
 ];
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -154,33 +228,76 @@ export function parseWithMock(index = 0): Promise<ParsedSyllabus> {
   });
 }
 
+/** Helper to get stored key */
+function getClientGeminiKey(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('studysync_gemini_api_key') || null;
+}
+
 /** Parse a real file via the API route. */
 export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('title', file.name.replace(/\.[^/.]+$/, ''));
+
+  const geminiKey = getClientGeminiKey();
+  const headers: Record<string, string> = {};
+  if (geminiKey) {
+    headers['x-gemini-api-key'] = geminiKey;
+  }
 
   const res = await fetch('/api/parse-syllabus', {
     method: 'POST',
+    headers,
     body: formData,
   });
 
   if (!res.ok) {
-    throw new Error(`Parse failed: ${res.statusText}`);
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Parse failed (${res.status}): ${res.statusText}`);
   }
 
   const data = await res.json();
-  // Ensure id is present
   return {
     ...data,
     id: data.id ?? `upload_${Date.now()}`,
-    source: file.name,
+    // Preserve source from API (e.g. 'gemini-ai', 'local-parser'); only fall back to filename if missing
+    source: data.source ?? file.name,
   } as ParsedSyllabus;
 }
 
-/** Main entry point: uses mock or real depending on env var. */
+/** Parse raw text or pasted syllabus notes via the API route. */
+export async function parseTextWithAPI(text: string, title = 'Pasted Syllabus'): Promise<ParsedSyllabus> {
+  const geminiKey = getClientGeminiKey();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (geminiKey) {
+    headers['x-gemini-api-key'] = geminiKey;
+  }
+
+  const res = await fetch('/api/parse-syllabus', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ text, title }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Parse failed (${res.status}): ${res.statusText}`);
+  }
+
+  const data = await res.json();
+  return {
+    ...data,
+    id: data.id ?? `text_${Date.now()}`,
+    // Preserve source from API (e.g. 'gemini-ai', 'local-parser'); only fall back to title if missing
+    source: data.source ?? title,
+  } as ParsedSyllabus;
+}
+
+/** Main entry point: uses real API parsing by default so uploaded notes (Maths, JS, etc.) are accurately analyzed. */
 export async function parseSyllabus(file: File): Promise<ParsedSyllabus> {
-  const useMock = process.env.NEXT_PUBLIC_USE_MOCK_AI !== 'false';
-  if (useMock) {
+  const useMockExplicit = process.env.NEXT_PUBLIC_USE_MOCK_AI === 'true';
+  if (useMockExplicit) {
     return parseWithMock();
   }
   return parseWithAPI(file);
