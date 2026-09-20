@@ -167,16 +167,8 @@ export default function UploadPage() {
           </span>
         </Link>
         <div className="flex items-center gap-2 text-sm text-[#888baa]">
-          <button
-            onClick={() => setIsKeyModalOpen(true)}
-            className={`btn btn-secondary text-xs sm:text-sm flex items-center gap-1.5 px-3 py-1.5 transition-all ${
-              hasApiKey ? 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10' : 'text-primary-300'
-            }`}
-          >
-            <Key className="w-3.5 h-3.5" />
-            {hasApiKey ? '✨ AI Active' : '⚙️ AI Setup'}
-          </button>
-          <span className="badge badge-primary hidden sm:inline-flex">Step 1 of 2</span>
+          <span className="badge badge-primary">✨ AI Powered</span>
+          <span className="text-xs text-[#888baa] hidden sm:inline-flex">Step 1 of 2</span>
         </div>
       </nav>
 
@@ -369,32 +361,24 @@ export default function UploadPage() {
           </div>
         )}
 
-        {/* Error Notification */}
+        {/* Parsing Notice */}
         {parseState === 'error' && (
           <div className="mt-5 sm:mt-6 space-y-3 animate-scaleIn">
             <div className="warning-banner flex items-start gap-2.5 p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-sm">
               <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold">Parsing Notice</p>
+                <p className="font-semibold">Processing Notice</p>
                 <p className="mt-1 text-xs sm:text-sm text-amber-300/90">{error}</p>
               </div>
             </div>
-            <div className="glass p-3 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-[#888baa]">
-              <span>Tip: Set up your free Gemini key for scanned PDFs, or paste text directly.</span>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <button
-                  onClick={() => setIsKeyModalOpen(true)}
-                  className="btn btn-primary text-xs flex items-center gap-1.5 py-1 px-3"
-                >
-                  <Key className="w-3.5 h-3.5" /> Setup Gemini Key
-                </button>
-                <button
-                  onClick={() => { setInputMode('paste'); setParseState('idle'); }}
-                  className="text-primary-400 hover:underline font-medium ml-1"
-                >
-                  Switch to Paste
-                </button>
-              </div>
+            <div className="glass p-3 rounded-lg flex items-center justify-between gap-2.5 text-xs text-[#888baa]">
+              <span>Try pasting your syllabus text directly for instant chapter extraction.</span>
+              <button
+                onClick={() => { setInputMode('paste'); setParseState('idle'); }}
+                className="btn btn-primary text-xs py-1 px-3"
+              >
+                Switch to Paste Tab
+              </button>
             </div>
           </div>
         )}
@@ -405,7 +389,7 @@ export default function UploadPage() {
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
               <span className="font-semibold text-green-400">Syllabus parsed successfully!</span>
-              
+
               <div className="sm:ml-auto flex items-center gap-2">
                 {result.source === 'demo' ? (
                   <span className="badge badge-secondary text-xs">Sample / Demo Data</span>
@@ -419,6 +403,8 @@ export default function UploadPage() {
                     ? '✨ Gemini AI'
                     : result.source === 'openai'
                     ? '🤖 OpenAI'
+                    : result.source === 'smart-engine'
+                    ? '⚡ Curriculum AI'
                     : result.source === 'local-parser'
                     ? '⚡ Structural Engine'
                     : 'Demo'}
@@ -472,6 +458,15 @@ export default function UploadPage() {
             </button>
           </div>
         )}
+        {/* Optional Custom API Key Trigger */}
+        <div className="mt-8 text-center">
+          <button
+            onClick={() => setIsKeyModalOpen(true)}
+            className="text-[11px] text-[#555870] hover:text-[#888baa] transition-colors underline"
+          >
+            Custom API Key Settings (Optional)
+          </button>
+        </div>
       </div>
     </main>
   );

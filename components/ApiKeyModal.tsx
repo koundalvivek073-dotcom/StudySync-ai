@@ -72,8 +72,8 @@ export default function ApiKeyModal({ isOpen, onClose, onKeySaved }: ApiKeyModal
             <Key className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="font-bold text-lg text-white">AI Setup & API Key</h3>
-            <p className="text-xs text-[#888baa]">Powers chapterwise syllabus parsing and AI scheduling</p>
+            <h3 className="font-bold text-lg text-white">Custom Gemini API Key</h3>
+            <p className="text-xs text-[#888baa]">Optional — only needed if you want custom Google AI quotas</p>
           </div>
         </div>
 
