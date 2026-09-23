@@ -221,26 +221,30 @@ function drawSyllabusPage(pdf: jsPDF, opts: PDFExportOptions) {
         y = 24;
       }
 
+      const diffKey = (item.difficulty || item.complexity || 'medium').toLowerCase();
       const complexColors: Record<string, [number, number, number]> = {
         easy: [34, 197, 94],
         medium: [234, 179, 8],
         hard: [239, 68, 68],
       };
-      const [cr, cg, cb] = complexColors[item.complexity] || [99, 102, 241];
+      const [cr, cg, cb] = complexColors[diffKey] || [99, 102, 241];
 
-      pdf.setFontSize(9);
+      pdf.setFontSize(8.5);
       pdf.setFont('helvetica', 'normal');
       pdf.setTextColor(220, 220, 240);
-      const chapterText = item.chapter.length > 55 ? item.chapter.slice(0, 52) + '...' : item.chapter;
-      pdf.text(`•  ${chapterText}`, 26, y);
+      const displayTitle = item.topicName && item.topicName !== item.chapter
+        ? `${item.chapter}: ${item.topicName}`
+        : item.chapter;
+      const topicText = displayTitle.length > 58 ? displayTitle.slice(0, 55) + '...' : displayTitle;
+      pdf.text(`•  ${topicText}`, 26, y);
 
-      // Complexity tag
+      // Difficulty tag
       pdf.setFillColor(cr, cg, cb);
       pdf.roundedRect(W - 55, y - 4, 18, 5.5, 1, 1, 'F');
       pdf.setFontSize(6.5);
       pdf.setTextColor(255, 255, 255);
       pdf.setFont('helvetica', 'bold');
-      pdf.text(item.complexity.toUpperCase(), W - 53, y);
+      pdf.text(diffKey.toUpperCase(), W - 53, y);
 
       // Hours tag
       pdf.setFontSize(8.5);

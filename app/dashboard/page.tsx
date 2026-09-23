@@ -127,15 +127,22 @@ function BlockModal({
 
         {/* Syllabus info */}
         {item && (
-          <div className="rounded-xl p-3 mb-4 text-xs space-y-1"
+          <div className="rounded-xl p-3 mb-4 text-xs space-y-1.5"
             style={{ background: 'rgba(255,255,255,0.04)' }}>
-            <div className="text-[#888]">Subject: <span className="text-white">{item.subject}</span></div>
-            <div className="text-[#888]">Chapter: <span className="text-white">{item.chapter}</span></div>
-            {item.subtopic && <div className="text-[#888]">Topic: <span className="text-white">{item.subtopic}</span></div>}
-            <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold`}
-              style={{ background: `${block.color}33`, color: block.color }}>
-              {item.complexity} complexity
-            </span>
+            <div className="text-[#888]">Subject: <span className="text-white font-medium">{item.subject}</span></div>
+            <div className="text-[#888]">Chapter: <span className="text-white font-medium">{item.chapter}</span></div>
+            {(item.topicName || item.subtopic) && (
+              <div className="text-[#888]">Topic: <span className="text-[#a5b4fc] font-medium">{item.topicName || item.subtopic}</span></div>
+            )}
+            <div className="flex items-center gap-2 pt-1">
+              <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider`}
+                style={{ background: `${block.color}33`, color: block.color }}>
+                {item.difficulty || item.complexity} difficulty
+              </span>
+              <span className="text-[10px] text-[#888]">
+                ⏱️ {item.estimatedHours}h
+              </span>
+            </div>
           </div>
         )}
 

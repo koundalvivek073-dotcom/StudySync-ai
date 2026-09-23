@@ -11,23 +11,67 @@ export interface TimeWindow {
 
 // ─── Syllabus ────────────────────────────────────────────────────────────────
 
-export type Complexity = 'easy' | 'medium' | 'hard';
+export type Difficulty = 'easy' | 'medium' | 'hard';
+export type Complexity = Difficulty; // backwards compatibility alias
+
+export interface GranularTopic {
+  id?: string;
+  topicName: string;
+  difficulty: Difficulty;
+  estimatedHours: number;
+  prerequisites?: string[];
+  completed?: number;
+}
+
+export interface ChapterItem {
+  id?: string;
+  chapterName: string;
+  topics: GranularTopic[];
+}
+
+export interface SubjectItem {
+  id?: string;
+  subjectName: string;
+  color?: string;
+  chapters: ChapterItem[];
+}
+
+export interface RawParsedSyllabusResponse {
+  title?: string;
+  parseConfidence?: number;
+  subjects: {
+    subjectName: string;
+    chapters: {
+      chapterName: string;
+      topics: {
+        topicName: string;
+        difficulty: Difficulty;
+        estimatedHours: number;
+        prerequisites?: string[];
+      }[];
+    }[];
+  }[];
+}
 
 export interface SyllabusItem {
   id: string;
   subject: string;
   chapter: string;
-  subTopics: string[];
-  complexity: Complexity;
+  topicName: string;
+  difficulty: Difficulty;
+  complexity: Difficulty; // backwards compatibility alias
   estimatedHours: number;
+  prerequisites?: string[];
   color: string; // hex color auto-assigned
   completed?: number; // 0–100 percent
+  subTopics?: string[]; // backwards compatibility
 }
 
 export interface ParsedSyllabus {
   id: string;           // unique ID for DB storage
   title: string;
   source?: string;      // 'upload' | 'demo' | filename
+  subjects?: SubjectItem[];
   items: SyllabusItem[];
   totalHours: number;
   parseConfidence: number; // 0–1
@@ -90,6 +134,10 @@ export interface ScheduleBlock {
   notes?: string;
   status?: BlockStatus; // only for study blocks
   originalDate?: string; // tracks if this block was reshuffled
+  difficulty?: Difficulty;
+  topicName?: string;
+  chapterName?: string;
+  subjectName?: string;
 }
 
 export interface ReshuffleResult {

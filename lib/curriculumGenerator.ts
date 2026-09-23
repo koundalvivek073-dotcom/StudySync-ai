@@ -402,42 +402,57 @@ export function generateSmartCurriculum(rawTitle?: string): ParsedSyllabus {
 
   const template = TEMPLATES[matchedCategory];
 
-  // Assign fresh sequential colors
-  const subjectColorMap = new Map<string, string>();
-  let cIdx = 0;
-
-  const items: SyllabusItem[] = template.topics.map((t, idx) => {
-    if (!subjectColorMap.has(t.subject)) {
-      subjectColorMap.set(t.subject, SUBJECT_COLORS[cIdx % SUBJECT_COLORS.length]);
-      cIdx++;
-    }
-
-    return {
-      id: `item_${Date.now()}_${idx}`,
-      subject: t.subject,
-      chapter: t.chapter,
-      subTopics: [...t.subTopics],
-      complexity: t.complexity,
-      estimatedHours: t.estimatedHours,
-      color: subjectColorMap.get(t.subject)!,
-      completed: 0,
-    };
-  });
-
-  const totalHours = items.reduce((acc, i) => acc + i.estimatedHours, 0);
-
   // Derive an appropriate title
   const finalTitle =
     cleanTitle && cleanTitle.length > 2 && !/^(document|upload|syllabus|file|sample|notes)$/i.test(cleanTitle)
       ? `${cleanTitle} — Comprehensive Syllabus`
       : template.title;
 
-  return {
-    id: `curriculum_${Date.now()}`,
-    title: finalTitle,
-    source: 'smart-engine',
-    items,
-    totalHours,
-    parseConfidence: 0.94,
-  };
+  // Transform template chapters into structured subjects with granular topics
+  const subjectsMap = new Map<string, { chapterName: string; topics: any[] }[]>();
+  for (const t of template.topics) {
+    if (!subjectsMap.has(t.subject)) {
+      subjectsMap.set(t.subject, []);
+    }
+    const subTopics = t.subTopics && t.subTopics.length > 0 ? t.subTopics : [t.chapter];
+    const hoursPerTopic = Math.max(1, Math.round((t.estimatedHours / subTopics.length) * 2) / 2);
+    const topics = subTopics.map((st, sIdx) => {
+      // Dynamic difficulty tuning per topic
+      const testText = `${t.chapter} ${st}`.toLowerCase();
+      let diff = t.complexity;
+      if (/(proof|calculus|quantum|derivation|deep|advanced|theorem|optimization|dynamic|complex|deadlock|concurrency)/.test(testText)) {
+        diff = 'hard';
+      } else if (/(intro|basics|overview|history|syntax|fundamentals|principles|definition)/.test(testText)) {
+        diff = 'easy';
+      }
+
+      return {
+        topicName: st,
+        difficulty: diff,
+        estimatedHours: diff === 'hard' ? Math.max(hoursPerTopic, 2.0) : hoursPerTopic,
+        prerequisites: sIdx > 0 ? [subTopics[sIdx - 1]] : [],
+      };
+    });
+
+    subjectsMap.get(t.subject)!.push({
+      chapterName: t.chapter,
+      topics,
+    });
+  }
+
+  const structuredSubjects = Array.from(subjectsMap.entries()).map(([subjectName, chapters]) => ({
+    subjectName,
+    chapters,
+  }));
+
+  const { normalizeToParsedSyllabus } = require('./syllabusParser');
+  return normalizeToParsedSyllabus(
+    {
+      title: finalTitle,
+      subjects: structuredSubjects,
+      parseConfidence: 0.94,
+    },
+    finalTitle,
+    'smart-engine',
+  );
 }

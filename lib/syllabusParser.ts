@@ -6,7 +6,14 @@
  * Toggle via NEXT_PUBLIC_USE_MOCK_AI=true in .env.local
  */
 
-import { ParsedSyllabus, SyllabusItem } from './types';
+import {
+  ParsedSyllabus,
+  SyllabusItem,
+  Difficulty,
+  SubjectItem,
+  ChapterItem,
+  GranularTopic,
+} from './types';
 import { generateSmartCurriculum } from './curriculumGenerator';
 
 // ─── Color Palette ────────────────────────────────────────────────────────────
@@ -18,204 +25,386 @@ const SUBJECT_COLORS = [
 ];
 
 let colorIndex = 0;
-const nextColor = () => SUBJECT_COLORS[colorIndex++ % SUBJECT_COLORS.length];
+export const nextColor = () => SUBJECT_COLORS[colorIndex++ % SUBJECT_COLORS.length];
 
-// ─── Mock Syllabi ─────────────────────────────────────────────────────────────
+/**
+ * Normalizes raw structured model output or local parser output into the unified ParsedSyllabus structure.
+ * Supports both the hierarchical subjects->chapters->topics structure and legacy flat items.
+ */
+export function normalizeToParsedSyllabus(raw: any, titleHint?: string, source = 'ai'): ParsedSyllabus {
+  const colorMap = new Map<string, string>();
+  let cIdx = 0;
+  const getColor = (subj: string) => {
+    if (!colorMap.has(subj)) {
+      colorMap.set(subj, SUBJECT_COLORS[cIdx % SUBJECT_COLORS.length]);
+      cIdx++;
+    }
+    return colorMap.get(subj)!;
+  };
 
-const MOCK_SYLLABI: ParsedSyllabus[] = [
+  const subjects: SubjectItem[] = [];
+  const items: SyllabusItem[] = [];
+  let calculatedHours = 0;
+
+  // Case 1: Structured hierarchy { subjects: [ { subjectName, chapters: [ { chapterName, topics: [...] } ] } ] }
+  if (raw && Array.isArray(raw.subjects) && raw.subjects.length > 0) {
+    raw.subjects.forEach((subjRaw: any, sIdx: number) => {
+      const subjectName = (subjRaw.subjectName || subjRaw.subject || `Subject ${sIdx + 1}`).trim();
+      const color = getColor(subjectName);
+      const chapters: ChapterItem[] = [];
+
+      const rawChapters = Array.isArray(subjRaw.chapters) ? subjRaw.chapters : [];
+      rawChapters.forEach((chapRaw: any, cIdxInner: number) => {
+        const chapterName = (chapRaw.chapterName || chapRaw.chapter || `Chapter ${cIdxInner + 1}`).trim();
+        const topics: GranularTopic[] = [];
+
+        const rawTopics = Array.isArray(chapRaw.topics)
+          ? chapRaw.topics
+          : Array.isArray(chapRaw.subTopics)
+          ? chapRaw.subTopics.map((st: string) => ({ topicName: st, difficulty: 'medium', estimatedHours: 2 }))
+          : [];
+
+        rawTopics.forEach((topRaw: any, tIdx: number) => {
+          const rawName = typeof topRaw === 'string' ? topRaw : topRaw.topicName || topRaw.name || `Topic ${tIdx + 1}`;
+          const topicName = rawName.replace(/^[-*•\s]+/, '').replace(/https?:\/\/\S+/gi, '').trim();
+          if (!topicName || topicName.length < 2) return;
+
+          let diff: Difficulty = 'medium';
+          const dStr = (topRaw.difficulty || topRaw.complexity || '').toString().toLowerCase();
+          if (dStr === 'easy' || dStr === 'medium' || dStr === 'hard') {
+            diff = dStr;
+          } else {
+            const testText = `${chapterName} ${topicName}`.toLowerCase();
+            if (/(proof|calculus|quantum|derivation|deep|advanced|theorem|optimization|dynamic|complex|deadlock|concurrency|b-tree)/.test(testText)) {
+              diff = 'hard';
+            } else if (/(intro|basics|overview|history|syntax|fundamentals|principles|definition|diagram)/.test(testText)) {
+              diff = 'easy';
+            }
+          }
+
+          const hours = typeof topRaw.estimatedHours === 'number' && !isNaN(topRaw.estimatedHours)
+            ? Math.max(0.5, Math.min(8, Math.round(topRaw.estimatedHours * 2) / 2))
+            : diff === 'hard' ? 2.5 : diff === 'medium' ? 1.5 : 1.0;
+
+          const prereqs = Array.isArray(topRaw.prerequisites)
+            ? topRaw.prerequisites.filter((p: any) => typeof p === 'string' && p.trim().length > 0)
+            : [];
+
+          const topicItem: GranularTopic = {
+            id: `topic_${sIdx}_${cIdxInner}_${tIdx}_${Date.now()}`,
+            topicName,
+            difficulty: diff,
+            estimatedHours: hours,
+            prerequisites: prereqs,
+            completed: 0,
+          };
+          topics.push(topicItem);
+
+          items.push({
+            id: topicItem.id!,
+            subject: subjectName,
+            chapter: chapterName,
+            topicName,
+            difficulty: diff,
+            complexity: diff,
+            estimatedHours: hours,
+            prerequisites: prereqs,
+            color,
+            completed: 0,
+            subTopics: [topicName],
+          });
+
+          calculatedHours += hours;
+        });
+
+        if (topics.length > 0) {
+          chapters.push({
+            id: `chap_${sIdx}_${cIdxInner}_${Date.now()}`,
+            chapterName,
+            topics,
+          });
+        }
+      });
+
+      if (chapters.length > 0) {
+        subjects.push({
+          id: `subj_${sIdx}_${Date.now()}`,
+          subjectName,
+          color,
+          chapters,
+        });
+      }
+    });
+  }
+
+  // Case 2: Legacy flat items array fallback
+  if (items.length === 0 && raw && Array.isArray(raw.items) && raw.items.length > 0) {
+    raw.items.forEach((item: any, iIdx: number) => {
+      const subject = item.subject || 'General Studies';
+      const chapter = item.chapter || `Chapter ${iIdx + 1}`;
+      const color = getColor(subject);
+      const subTopics: string[] = Array.isArray(item.subTopics) && item.subTopics.length > 0
+        ? item.subTopics
+        : [item.topicName || chapter];
+
+      subTopics.forEach((st, sIdx) => {
+        const diff: Difficulty = (item.difficulty || item.complexity || 'medium') as Difficulty;
+        const hours = Math.max(1, Math.round((item.estimatedHours || 6) / subTopics.length * 2) / 2);
+        items.push({
+          id: `legacy_${iIdx}_${sIdx}_${Date.now()}`,
+          subject,
+          chapter,
+          topicName: st,
+          difficulty: diff,
+          complexity: diff,
+          estimatedHours: hours,
+          prerequisites: [],
+          color,
+          completed: 0,
+          subTopics: [st],
+        });
+        calculatedHours += hours;
+      });
+    });
+  }
+
+  // Ensure at least one fallback item exists
+  if (items.length === 0) {
+    const fallbackTitle = titleHint || 'Fundamentals';
+    const color = getColor(fallbackTitle);
+    items.push({
+      id: `fallback_${Date.now()}`,
+      subject: fallbackTitle,
+      chapter: 'Core Concepts',
+      topicName: 'Fundamental Principles & Practice',
+      difficulty: 'medium',
+      complexity: 'medium',
+      estimatedHours: 6,
+      prerequisites: [],
+      color,
+      completed: 0,
+      subTopics: ['Fundamental Principles & Practice'],
+    });
+    calculatedHours = 6;
+  }
+
+  const finalTitle = raw?.title || titleHint || (items[0]?.subject ? `${items[0].subject} Syllabus` : 'Analyzed Syllabus');
+  const confidence = Math.min(0.98, Math.max(0.7, typeof raw?.parseConfidence === 'number' ? raw.parseConfidence : 0.92));
+
+  return {
+    id: raw?.id || `syllabus_${Date.now()}`,
+    title: finalTitle,
+    source,
+    subjects: subjects.length > 0 ? subjects : undefined,
+    items,
+    totalHours: Math.round(calculatedHours * 10) / 10,
+    parseConfidence: confidence,
+  };
+}
+
+// ─── Granular Mock Syllabi ────────────────────────────────────────────────────
+
+const RAW_MOCK_DATA = [
   {
     id: 'demo_cs_sem5',
-    source: 'demo',
     title: 'Computer Science Engineering — Semester 5',
-    totalHours: 180,
-    parseConfidence: 0.92,
-    items: [
+    subjects: [
       {
-        id: 'cs1', subject: 'Operating Systems', chapter: 'Process Management',
-        subTopics: ['Processes & Threads', 'CPU Scheduling', 'Deadlocks', 'IPC'],
-        complexity: 'hard', estimatedHours: 18, color: '#6366f1', completed: 0,
+        subjectName: 'Operating Systems',
+        chapters: [
+          {
+            chapterName: 'Process Management',
+            topics: [
+              { topicName: 'Processes & Thread Lifecycle', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: [] },
+              { topicName: 'CPU Scheduling Algorithms (FCFS, SJF, Round Robin)', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Processes & Thread Lifecycle'] },
+              { topicName: 'Deadlock Conditions & Prevention (Bankers Algorithm)', difficulty: 'hard' as Difficulty, estimatedHours: 3.0, prerequisites: ['Processes & Thread Lifecycle'] },
+              { topicName: 'Inter-Process Communication & Semaphores', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: ['Processes & Thread Lifecycle'] },
+            ],
+          },
+          {
+            chapterName: 'Memory Management',
+            topics: [
+              { topicName: 'Paging & Segmentation Architecture', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: [] },
+              { topicName: 'Virtual Memory & Page Fault Handling', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Paging & Segmentation Architecture'] },
+              { topicName: 'Page Replacement Algorithms (FIFO, LRU, Clock)', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: ['Virtual Memory & Page Fault Handling'] },
+            ],
+          },
+        ],
       },
       {
-        id: 'cs2', subject: 'Operating Systems', chapter: 'Memory Management',
-        subTopics: ['Virtual Memory', 'Paging', 'Segmentation', 'Page Replacement'],
-        complexity: 'hard', estimatedHours: 16, color: '#6366f1', completed: 0,
+        subjectName: 'Database Management Systems',
+        chapters: [
+          {
+            chapterName: 'Relational Model & Design',
+            topics: [
+              { topicName: 'Entity-Relationship Diagrams & Schema Mapping', difficulty: 'easy' as Difficulty, estimatedHours: 1.5, prerequisites: [] },
+              { topicName: 'Relational Normalization (1NF, 2NF, 3NF, BCNF)', difficulty: 'hard' as Difficulty, estimatedHours: 3.0, prerequisites: ['Entity-Relationship Diagrams & Schema Mapping'] },
+              { topicName: 'Complex SQL Queries & Subquery Optimization', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: [] },
+              { topicName: 'ACID Transactions & Two-Phase Locking', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Relational Normalization (1NF, 2NF, 3NF, BCNF)'] },
+            ],
+          },
+          {
+            chapterName: 'Indexing & Performance',
+            topics: [
+              { topicName: 'B-Tree & B+ Tree Indexing Internals', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: [] },
+              { topicName: 'Stored Procedures, Triggers & Views', difficulty: 'medium' as Difficulty, estimatedHours: 1.5, prerequisites: [] },
+            ],
+          },
+        ],
       },
       {
-        id: 'cs3', subject: 'Database Management', chapter: 'Relational Model',
-        subTopics: ['ER Diagrams', 'Normalization', 'SQL Queries', 'Transactions'],
-        complexity: 'medium', estimatedHours: 20, color: '#8b5cf6', completed: 0,
+        subjectName: 'Computer Networks',
+        chapters: [
+          {
+            chapterName: 'Network Architecture & Protocols',
+            topics: [
+              { topicName: 'OSI Physical & Data Link Framing (MAC, ARP)', difficulty: 'easy' as Difficulty, estimatedHours: 1.5, prerequisites: [] },
+              { topicName: 'IPv4 & IPv6 Subnetting & CIDR Calculation', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: [] },
+              { topicName: 'TCP Handshake, Congestion & Flow Control', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['IPv4 & IPv6 Subnetting & CIDR Calculation'] },
+              { topicName: 'DNS, HTTP/2, HTTP/3 & TLS Security', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: ['TCP Handshake, Congestion & Flow Control'] },
+            ],
+          },
+        ],
       },
       {
-        id: 'cs4', subject: 'Database Management', chapter: 'Advanced SQL & Indexing',
-        subTopics: ['Stored Procedures', 'Triggers', 'B-Trees', 'Query Optimization'],
-        complexity: 'hard', estimatedHours: 14, color: '#8b5cf6', completed: 0,
-      },
-      {
-        id: 'cs5', subject: 'Computer Networks', chapter: 'OSI & TCP/IP Model',
-        subTopics: ['Physical Layer', 'Data Link', 'Network Layer', 'Transport Layer'],
-        complexity: 'medium', estimatedHours: 15, color: '#ec4899', completed: 0,
-      },
-      {
-        id: 'cs6', subject: 'Computer Networks', chapter: 'Application Protocols',
-        subTopics: ['HTTP/HTTPS', 'DNS', 'SMTP', 'FTP', 'Socket Programming'],
-        complexity: 'medium', estimatedHours: 12, color: '#ec4899', completed: 0,
-      },
-      {
-        id: 'cs7', subject: 'Theory of Computation', chapter: 'Automata',
-        subTopics: ['DFA', 'NFA', 'Regular Expressions', 'CFG', 'Pushdown Automata'],
-        complexity: 'hard', estimatedHours: 20, color: '#f43f5e', completed: 0,
-      },
-      {
-        id: 'cs8', subject: 'Theory of Computation', chapter: 'Complexity',
-        subTopics: ['P vs NP', 'Turing Machines', 'Decidability', 'Reducibility'],
-        complexity: 'hard', estimatedHours: 18, color: '#f43f5e', completed: 0,
-      },
-      {
-        id: 'cs9', subject: 'Software Engineering', chapter: 'SDLC & Agile',
-        subTopics: ['Waterfall', 'Scrum', 'Kanban', 'Requirements Engineering'],
-        complexity: 'easy', estimatedHours: 10, color: '#f97316', completed: 0,
-      },
-      {
-        id: 'cs10', subject: 'Software Engineering', chapter: 'Testing & Metrics',
-        subTopics: ['Unit Testing', 'Integration Testing', 'Code Coverage', 'CI/CD'],
-        complexity: 'medium', estimatedHours: 12, color: '#f97316', completed: 0,
-      },
-      {
-        id: 'cs11', subject: 'Discrete Mathematics', chapter: 'Graph Theory',
-        subTopics: ['Trees', 'Shortest Paths', 'Spanning Trees', 'Network Flow'],
-        complexity: 'medium', estimatedHours: 14, color: '#eab308', completed: 0,
-      },
-      {
-        id: 'cs12', subject: 'Discrete Mathematics', chapter: 'Logic & Proofs',
-        subTopics: ['Propositional Logic', 'Predicate Logic', 'Proof Techniques'],
-        complexity: 'medium', estimatedHours: 11, color: '#eab308', completed: 0,
+        subjectName: 'Theory of Computation',
+        chapters: [
+          {
+            chapterName: 'Automata & Decidability',
+            topics: [
+              { topicName: 'DFA & NFA Equivalence and Regular Expressions', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: [] },
+              { topicName: 'Context-Free Grammars & Pushdown Automata', difficulty: 'hard' as Difficulty, estimatedHours: 3.0, prerequisites: ['DFA & NFA Equivalence and Regular Expressions'] },
+              { topicName: 'Turing Machines & The Halting Problem', difficulty: 'hard' as Difficulty, estimatedHours: 3.0, prerequisites: ['Context-Free Grammars & Pushdown Automata'] },
+              { topicName: 'P vs NP Concepts & Reducibility', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Turing Machines & The Halting Problem'] },
+            ],
+          },
+        ],
       },
     ],
   },
   {
     id: 'demo_upsc_gs',
-    source: 'demo',
     title: 'UPSC Civil Services — General Studies',
-    totalHours: 240,
-    parseConfidence: 0.88,
-    items: [
+    subjects: [
       {
-        id: 'u1', subject: 'History', chapter: 'Ancient India',
-        subTopics: ['Indus Valley', 'Vedic Period', 'Maurya Empire', 'Gupta Period'],
-        complexity: 'medium', estimatedHours: 20, color: '#6366f1', completed: 0,
+        subjectName: 'History',
+        chapters: [
+          {
+            chapterName: 'Ancient & Medieval India',
+            topics: [
+              { topicName: 'Indus Valley Civilization & Town Planning', difficulty: 'easy' as Difficulty, estimatedHours: 1.5, prerequisites: [] },
+              { topicName: 'Vedic Literature, Philosophy & Society', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: [] },
+              { topicName: 'Maurya Empire Administration & Ashokan Edicts', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Vedic Literature, Philosophy & Society'] },
+            ],
+          },
+          {
+            chapterName: 'Modern Indian Struggle',
+            topics: [
+              { topicName: 'British Colonial Policies & Socio-Religious Reforms', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: [] },
+              { topicName: 'Freedom Movement: 1857 to Non-Cooperation', difficulty: 'hard' as Difficulty, estimatedHours: 3.0, prerequisites: ['British Colonial Policies & Socio-Religious Reforms'] },
+              { topicName: 'Partition, Independence & State Reorganisation', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: ['Freedom Movement: 1857 to Non-Cooperation'] },
+            ],
+          },
+        ],
       },
       {
-        id: 'u2', subject: 'History', chapter: 'Modern India',
-        subTopics: ['British Rule', 'Freedom Struggle', 'Partition', 'Post-Independence'],
-        complexity: 'hard', estimatedHours: 30, color: '#6366f1', completed: 0,
+        subjectName: 'Polity & Governance',
+        chapters: [
+          {
+            chapterName: 'Indian Constitutional Framework',
+            topics: [
+              { topicName: 'Preamble, Fundamental Rights & Writs', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: [] },
+              { topicName: 'Directive Principles (DPSP) & Basic Structure Doctrine', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Preamble, Fundamental Rights & Writs'] },
+              { topicName: 'Parliamentary Lawmaking & Executive Powers', difficulty: 'hard' as Difficulty, estimatedHours: 3.0, prerequisites: ['Preamble, Fundamental Rights & Writs'] },
+              { topicName: 'Supreme Court Jurisdiction & Judicial Review', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Parliamentary Lawmaking & Executive Powers'] },
+            ],
+          },
+        ],
       },
       {
-        id: 'u3', subject: 'Geography', chapter: 'Physical Geography',
-        subTopics: ['Landforms', 'Climate', 'Drainage Systems', 'Natural Resources'],
-        complexity: 'medium', estimatedHours: 25, color: '#8b5cf6', completed: 0,
+        subjectName: 'Economy',
+        chapters: [
+          {
+            chapterName: 'Macroeconomics & Fiscal Policy',
+            topics: [
+              { topicName: 'National Income Accounting (GDP, GVA, Real vs Nominal)', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: [] },
+              { topicName: 'Monetary Policy Framework & RBI Repo Mechanisms', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['National Income Accounting (GDP, GVA, Real vs Nominal)'] },
+              { topicName: 'Union Budget, Fiscal Deficit & GST Architecture', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: [] },
+              { topicName: 'Agricultural Subsidies & Food Security (MSP, PDS)', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: [] },
+            ],
+          },
+        ],
       },
       {
-        id: 'u4', subject: 'Polity', chapter: 'Indian Constitution',
-        subTopics: ['Fundamental Rights', 'Directive Principles', 'Parliament', 'Judiciary'],
-        complexity: 'hard', estimatedHours: 35, color: '#ec4899', completed: 0,
-      },
-      {
-        id: 'u5', subject: 'Economics', chapter: 'Indian Economy',
-        subTopics: ['GDP', 'Inflation', 'Monetary Policy', 'Five Year Plans', 'Agriculture'],
-        complexity: 'hard', estimatedHours: 30, color: '#f43f5e', completed: 0,
-      },
-      {
-        id: 'u6', subject: 'Science & Tech', chapter: 'Current Developments',
-        subTopics: ['Space', 'Defence', 'Biotechnology', 'IT & Cyber'],
-        complexity: 'medium', estimatedHours: 20, color: '#22c55e', completed: 0,
-      },
-      {
-        id: 'u7', subject: 'Environment', chapter: 'Ecology & Climate',
-        subTopics: ['Biodiversity', 'Climate Change', 'Treaties', 'Pollution'],
-        complexity: 'medium', estimatedHours: 20, color: '#14b8a6', completed: 0,
-      },
-      {
-        id: 'u8', subject: 'Current Affairs', chapter: 'Monthly Compilation',
-        subTopics: ['National', 'International', 'Schemes', 'Awards & Recognition'],
-        complexity: 'easy', estimatedHours: 60, color: '#06b6d4', completed: 0,
+        subjectName: 'Environment & Science',
+        chapters: [
+          {
+            chapterName: 'Ecology & Biodiversity',
+            topics: [
+              { topicName: 'Ecosystem Dynamics & Energy Pyramids', difficulty: 'easy' as Difficulty, estimatedHours: 1.5, prerequisites: [] },
+              { topicName: 'Climate Change Conventions (UNFCCC, COP Accords)', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: [] },
+              { topicName: 'Space Exploration, Biotechnology & AI Governance', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: [] },
+            ],
+          },
+        ],
       },
     ],
   },
   {
     id: 'demo_biology_12',
-    source: 'demo',
     title: 'Senior Secondary Biology — Class 12 (CBSE 2025-26)',
-    totalHours: 140,
-    parseConfidence: 0.95,
-    items: [
+    subjects: [
       {
-        id: 'bio1', subject: 'Biology', chapter: 'Chapter 1: Sexual Reproduction in Flowering Plants',
-        subTopics: ['Flower Structure & Pre-fertilization', 'Pollination & Pollen-Pistil Interaction', 'Double Fertilization', 'Endosperm & Embryo Development', 'Seeds, Fruits & Apomixis'],
-        complexity: 'medium', estimatedHours: 12, color: '#10b981', completed: 0,
-      },
-      {
-        id: 'bio2', subject: 'Biology', chapter: 'Chapter 2: Human Reproduction',
-        subTopics: ['Male & Female Reproductive Systems', 'Gametogenesis (Spermatogenesis & Oogenesis)', 'Menstrual Cycle & Hormonal Regulation', 'Fertilization, Implantation & Pregnancy', 'Parturition & Lactation'],
-        complexity: 'hard', estimatedHours: 14, color: '#10b981', completed: 0,
-      },
-      {
-        id: 'bio3', subject: 'Biology', chapter: 'Chapter 3: Reproductive Health',
-        subTopics: ['Population Stabilization & Contraceptive Methods', 'Medical Termination of Pregnancy (MTP)', 'Sexually Transmitted Infections (STIs)', 'Infertility & Assisted Reproductive Technologies (ART)'],
-        complexity: 'easy', estimatedHours: 8, color: '#10b981', completed: 0,
-      },
-      {
-        id: 'bio4', subject: 'Biology', chapter: 'Chapter 4: Principles of Inheritance & Variation',
-        subTopics: ['Mendelian Ratios & Deviations', 'Chromosomal Theory of Inheritance', 'Sex Determination & Linkage', 'Pedigree Analysis & Mendelian Disorders', 'Chromosomal Disorders (Down, Turner, Klinefelter)'],
-        complexity: 'hard', estimatedHours: 18, color: '#8b5cf6', completed: 0,
-      },
-      {
-        id: 'bio5', subject: 'Biology', chapter: 'Chapter 5: Molecular Basis of Inheritance',
-        subTopics: ['DNA as Genetic Material & Structure', 'DNA Packaging & Central Dogma', 'DNA Replication Mechanics', 'Transcription & RNA Processing', 'Genetic Code & Translation', 'Lac Operon & Human Genome Project', 'DNA Fingerprinting'],
-        complexity: 'hard', estimatedHours: 20, color: '#8b5cf6', completed: 0,
-      },
-      {
-        id: 'bio6', subject: 'Biology', chapter: 'Chapter 6: Evolution',
-        subTopics: ['Origin of Life & Geological Time Scale', 'Evidences for Evolution (Comparative Anatomy & Embryology)', 'Darwinism, Natural Selection & Hardy-Weinberg Principle', 'Adaptive Radiation & Human Evolution'],
-        complexity: 'medium', estimatedHours: 12, color: '#8b5cf6', completed: 0,
-      },
-      {
-        id: 'bio7', subject: 'Biology', chapter: 'Chapter 7: Human Health & Disease',
-        subTopics: ['Common Human Diseases (Typhoid, Malaria, Pneumonia)', 'Innate & Acquired Immunity, Antibodies', 'Vaccination, Allergies & Autoimmunity', 'AIDS (HIV Life Cycle) & Cancer', 'Drug & Alcohol Abuse Prevention'],
-        complexity: 'medium', estimatedHours: 14, color: '#f59e0b', completed: 0,
-      },
-      {
-        id: 'bio8', subject: 'Biology', chapter: 'Chapter 8: Microbes in Human Welfare',
-        subTopics: ['Microbes in Household Food Processing', 'Industrial Fermentation & Antibiotics', 'Biological Sewage Treatment (STP)', 'Biogas Production & Methanogens', 'Biocontrol Agents & Biofertilizers'],
-        complexity: 'easy', estimatedHours: 8, color: '#f59e0b', completed: 0,
-      },
-      {
-        id: 'bio9', subject: 'Biology', chapter: 'Chapter 9: Biotechnology — Principles & Processes',
-        subTopics: ['Genetic Engineering & Recombinant DNA', 'Restriction Enzymes & DNA Ligase', 'Cloning Vectors (pBR322, Ti Plasmid)', 'Polymerase Chain Reaction (PCR)', 'Bioreactors & Downstream Processing'],
-        complexity: 'hard', estimatedHours: 14, color: '#06b6d4', completed: 0,
-      },
-      {
-        id: 'bio10', subject: 'Biology', chapter: 'Chapter 10: Biotechnology and Its Applications',
-        subTopics: ['Genetically Modified Crops (Bt Cotton, RNAi)', 'Therapeutic Insulin Production in Bacteria', 'Gene Therapy (ADA Deficiency)', 'Transgenic Animals & Ethical Issues'],
-        complexity: 'medium', estimatedHours: 10, color: '#06b6d4', completed: 0,
-      },
-      {
-        id: 'bio11', subject: 'Biology', chapter: 'Chapter 11: Organisms and Populations',
-        subTopics: ['Major Abiotic Factors & Homeostasis', 'Physiological & Behavioral Adaptations', 'Population Attributes & Growth Models (Logistic vs Exponential)', 'Species Interactions (Mutualism, Parasitism, Competition)'],
-        complexity: 'medium', estimatedHours: 10, color: '#ec4899', completed: 0,
-      },
-      {
-        id: 'bio12', subject: 'Biology', chapter: 'Chapter 12: Ecosystem',
-        subTopics: ['Ecosystem Structure & Stratification', 'Primary & Secondary Productivity', 'Decomposition Stages & Factors', 'Energy Flow (10% Law)', 'Ecological Pyramids (Number, Biomass, Energy)'],
-        complexity: 'easy', estimatedHours: 8, color: '#ec4899', completed: 0,
-      },
-      {
-        id: 'bio13', subject: 'Biology', chapter: 'Chapter 13: Biodiversity and Conservation',
-        subTopics: ['Levels & Latitudinal Gradients of Biodiversity', 'The Evil Quartet (Habitat Loss, Over-exploitation)', 'Why We Must Conserve Biodiversity', 'In-Situ vs Ex-Situ Conservation Strategies'],
-        complexity: 'easy', estimatedHours: 8, color: '#ec4899', completed: 0,
+        subjectName: 'Biology',
+        chapters: [
+          {
+            chapterName: 'Sexual Reproduction in Flowering Plants',
+            topics: [
+              { topicName: 'Flower Structure & Microsporogenesis Events', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: [] },
+              { topicName: 'Pollination Mechanisms & Pollen-Pistil Interaction', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: ['Flower Structure & Microsporogenesis Events'] },
+              { topicName: 'Double Fertilization & Endosperm Development', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Pollination Mechanisms & Pollen-Pistil Interaction'] },
+              { topicName: 'Embryogeny, Seed Dispersal & Apomixis', difficulty: 'easy' as Difficulty, estimatedHours: 1.5, prerequisites: ['Double Fertilization & Endosperm Development'] },
+            ],
+          },
+          {
+            chapterName: 'Human Reproduction & Health',
+            topics: [
+              { topicName: 'Male & Female Reproductive Anatomy', difficulty: 'easy' as Difficulty, estimatedHours: 1.5, prerequisites: [] },
+              { topicName: 'Gametogenesis (Spermatogenesis & Oogenesis)', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Male & Female Reproductive Anatomy'] },
+              { topicName: 'Menstrual Cycle & Hormonal Feedback Loops', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Gametogenesis (Spermatogenesis & Oogenesis)'] },
+              { topicName: 'Fertilization, Cleavage & Implantation', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: ['Menstrual Cycle & Hormonal Feedback Loops'] },
+              { topicName: 'Contraceptive Strategies & Assisted Reproductive Tech (ART)', difficulty: 'easy' as Difficulty, estimatedHours: 1.5, prerequisites: [] },
+            ],
+          },
+          {
+            chapterName: 'Genetics & Molecular Inheritance',
+            topics: [
+              { topicName: 'Mendelian Dihybrid Crosses & Deviations', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: [] },
+              { topicName: 'Sex Determination, Linkage & Chromosome Mapping', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Mendelian Dihybrid Crosses & Deviations'] },
+              { topicName: 'DNA Structure, Central Dogma & Nucleosome Packaging', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: [] },
+              { topicName: 'DNA Replication Enzymology (Meselson-Stahl)', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['DNA Structure, Central Dogma & Nucleosome Packaging'] },
+              { topicName: 'Transcription, RNA Splicing & Genetic Code', difficulty: 'hard' as Difficulty, estimatedHours: 3.0, prerequisites: ['DNA Replication Enzymology (Meselson-Stahl)'] },
+              { topicName: 'Lac Operon Model & Human Genome Project Overview', difficulty: 'hard' as Difficulty, estimatedHours: 2.0, prerequisites: ['Transcription, RNA Splicing & Genetic Code'] },
+            ],
+          },
+          {
+            chapterName: 'Biotechnology & Applications',
+            topics: [
+              { topicName: 'Restriction Endonucleases, Ligases & pBR322 Vectors', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: [] },
+              { topicName: 'Polymerase Chain Reaction (PCR) & Gel Electrophoresis', difficulty: 'medium' as Difficulty, estimatedHours: 2.0, prerequisites: ['Restriction Endonucleases, Ligases & pBR322 Vectors'] },
+              { topicName: 'Bioreactors & Downstream Processing Systems', difficulty: 'easy' as Difficulty, estimatedHours: 1.5, prerequisites: [] },
+              { topicName: 'Transgenic Crops (Bt Cotton, RNAi) & Recombinant Insulin', difficulty: 'hard' as Difficulty, estimatedHours: 2.5, prerequisites: ['Polymerase Chain Reaction (PCR) & Gel Electrophoresis'] },
+            ],
+          },
+        ],
       },
     ],
   },
 ];
+
+const MOCK_SYLLABI: ParsedSyllabus[] = RAW_MOCK_DATA.map((raw) =>
+  normalizeToParsedSyllabus(raw, raw.title, 'demo'),
+);
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 

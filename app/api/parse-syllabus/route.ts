@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ParsedSyllabus, SyllabusItem, Complexity } from '@/lib/types';
+import {
+  ParsedSyllabus,
+  SyllabusItem,
+  Difficulty,
+  SubjectItem,
+  ChapterItem,
+  GranularTopic,
+} from '@/lib/types';
 import { generateSmartCurriculum } from '@/lib/curriculumGenerator';
 import zlib from 'zlib';
 
@@ -8,6 +15,73 @@ const SUBJECT_COLORS = [
   '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6',
   '#a855f7', '#d946ef', '#fb923c', '#facc15', '#4ade80',
 ];
+
+const SYSTEM_INSTRUCTION = `You are a World-Class Academic Curriculum Expert and AI Engineer with encyclopedic knowledge of all school/college syllabi worldwide (CBSE, ICSE, IB, IGCSE, JEE, NEET, UPSC, University curricula, etc.).
+
+Your MOST CRITICAL capability: When given ONLY chapter names or class/grade information (e.g. "Class 12 Physics - Rotational Motion", "CBSE 10th Biology", "JEE Chemistry Organic"), you MUST use your internal academic knowledge base to generate a complete, detailed, pedagogically accurate breakdown of all key sub-topics for that chapter/subject — exactly as taught in textbooks.
+
+YOU ARE THE KNOWLEDGE SOURCE. Do NOT say "I cannot determine topics from this input." ALWAYS generate granular topics from your training knowledge.
+
+STRICT PEDAGOGICAL & EXTRACTION RULES:
+1. KNOWLEDGE ENRICHMENT (MOST IMPORTANT):
+   - If the input is bare chapter names, class info, or syllabus headings WITHOUT detailed topic lists, USE YOUR INTERNAL KNOWLEDGE to fill in all granular sub-topics.
+   - For example: "Class 12 Physics - Rotational Motion" → generate sub-topics like: "Torque & Angular Momentum", "Moment of Inertia & Parallel/Perpendicular Axis Theorems", "Rolling Motion & Kinetic Energy", "Angular Momentum Conservation", etc.
+   - For CBSE/JEE/NEET/UPSC subjects: Generate sub-topics exactly as they appear in NCERT textbooks or standard prep material.
+   - NEVER return the chapter name itself as a topic.
+
+2. STRUCTURE & HIERARCHY:
+   - Group topics under their exact "subjectName" and "chapterName".
+   - Break every chapter into 4 to 8 granular, actionable "topics".
+   - NEVER output broad, vague, full chapter titles as topic names!
+   - NEVER output raw web links, URLs, course policy text, grading breakdowns, or document noise.
+
+3. DIFFICULTY CLASSIFICATION (MANDATORY for every topic):
+   - "easy": Foundational definitions, basic recall, introductory concepts, qualitative overviews, historical facts.
+   - "medium": Standard problem-solving, mechanism explanations, procedural calculations, standard algorithms, numerical applications.
+   - "hard": Advanced theoretical proofs, complex derivations, multi-step optimization, nuanced edge cases, abstract theory, higher-order analysis.
+
+4. ESTIMATED STUDY HOURS:
+   - Assign realistic study hours per topic between 0.5 and 4.0 hours (typically 1.0–2.5h per sub-topic).
+   - Easy topics: 1.0–1.5h | Medium: 1.5–2.0h | Hard: 2.0–3.0h
+
+5. PREREQUISITES:
+   - List prerequisite topic names from earlier in the same chapter/subject (or empty array []).
+
+6. OUTPUT FORMAT — Output ONLY valid JSON:
+{
+  "title": "string (descriptive course/syllabus title)",
+  "parseConfidence": number (0.75 to 0.98),
+  "subjects": [
+    {
+      "subjectName": "Physics",
+      "chapters": [
+        {
+          "chapterName": "Rotational Motion",
+          "topics": [
+            {
+              "topicName": "Torque & Angular Momentum Concepts",
+              "difficulty": "medium",
+              "estimatedHours": 2.0,
+              "prerequisites": []
+            },
+            {
+              "topicName": "Moment of Inertia & Axis Theorems",
+              "difficulty": "hard",
+              "estimatedHours": 2.5,
+              "prerequisites": ["Torque & Angular Momentum Concepts"]
+            },
+            {
+              "topicName": "Rolling Motion & Kinetic Energy",
+              "difficulty": "hard",
+              "estimatedHours": 2.0,
+              "prerequisites": ["Moment of Inertia & Axis Theorems"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}`;
 
 function extractTextFromPdfBuffer(buf: Buffer): string {
   try {
@@ -68,68 +142,80 @@ function extractTextFromPdfBuffer(buf: Buffer): string {
   }
 }
 
-function assignSubjectColors(items: Omit<SyllabusItem, 'color' | 'id'>[]): SyllabusItem[] {
-  const colorMap = new Map<string, string>();
-  let cIdx = 0;
-
-  return items.map((item, idx) => {
-    if (!colorMap.has(item.subject)) {
-      colorMap.set(item.subject, SUBJECT_COLORS[cIdx % SUBJECT_COLORS.length]);
-      cIdx++;
-    }
-    return {
-      ...item,
-      id: `item_${Date.now()}_${idx}`,
-      color: colorMap.get(item.subject)!,
-      completed: 0,
-    };
-  });
-}
+import { normalizeToParsedSyllabus } from '@/lib/syllabusParser';
 
 // ─── Local Text Fallback Parser ────────────────────────────────────────────────
 function parseTextLocally(text: string, titleHint?: string): ParsedSyllabus {
-  const lines = text
+  // 1. Strip raw URLs, course policy text, grading percentages
+  const cleaned = text
+    .replace(/https?:\/\/[^\s]+/gi, '')
+    .replace(/www\.[^\s]+/gi, '')
+    .replace(/(?:grading|weightage|attendance|policy|academic integrity|office hours)[\s\S]*?(?=\n\n|\n[A-Z]|$)/gi, '');
+
+  const lines = cleaned
     .split(/\r?\n/)
     .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+    .filter((l) => l.length > 0 && !/^page \d+/i.test(l));
 
-  let currentSubject = titleHint?.replace(/\.[^/.]+$/, '') || 'General Studies';
-  let currentChapter = 'Overview & Fundamentals';
-  let currentSubTopics: string[] = [];
-  const items: Omit<SyllabusItem, 'color' | 'id'>[] = [];
+  let currentSubjectName = titleHint?.replace(/\.[^/.]+$/, '').trim() || 'General Studies';
+  let currentChapterName = 'Overview & Core Fundamentals';
+  const subjectsMap = new Map<string, Map<string, GranularTopic[]>>();
 
-  const flushChapter = () => {
-    if (currentSubTopics.length > 0) {
-      const isHard = /(calculus|quantum|algorithm|proof|architecture|theorem|compiler|dynamic|complex|integration|derivative|matrix)/i.test(
-        currentChapter + ' ' + currentSubTopics.join(' '),
-      );
-      const isEasy = /(intro|basics|overview|history|fundamentals|syntax|getting started)/i.test(
-        currentChapter + ' ' + currentSubTopics.join(' '),
-      );
-      const complexity: Complexity = isHard ? 'hard' : isEasy ? 'easy' : 'medium';
-      const estimatedHours = Math.max(
-        6,
-        Math.min(30, currentSubTopics.length * (complexity === 'hard' ? 4 : complexity === 'medium' ? 3 : 2)),
-      );
+  const getChapterMap = (subj: string) => {
+    if (!subjectsMap.has(subj)) subjectsMap.set(subj, new Map());
+    return subjectsMap.get(subj)!;
+  };
 
-      items.push({
-        subject: currentSubject,
-        chapter: currentChapter,
-        subTopics: [...currentSubTopics],
-        complexity,
-        estimatedHours,
-      });
-      currentSubTopics = [];
-    }
+  /**
+   * Validates that a string looks like an academic topic name, NOT a prose sentence fragment.
+   * Rejects: connector-word starts, prose sentence patterns, single filler words, extremes of length.
+   */
+  const isValidTopicName = (n: string): boolean => {
+    const s = n.trim();
+    if (s.length < 4 || s.length > 80) return false;
+    const wordCount = s.split(/\s+/).length;
+    // Single words only valid if 6+ chars (e.g. "Calculus", "Genetics")
+    if (wordCount === 1 && s.length < 6) return false;
+    // Reject lines starting with lowercase connectors / prepositions / articles
+    if (/^(to |as |and |or |that |which |such |with |from |for |of |in |a |an |the |is |are |was |were |be |been|by |at |on |into |also |both |all |its |this |these |those |their |it |we |you |they )/i.test(s)) return false;
+    // Reject prose sentence patterns
+    if (/\b(that are|which are|as well as|common to|such as|in order to|the principles of|the study of|refers to|is defined as|can be used|will be|should be|applies to)\b/i.test(s)) return false;
+    // Reject standalone filler words
+    if (/^(however|therefore|furthermore|additionally|moreover|although|because|since|while|when|simple|clear|underlying|general|main|key|basic)\s*$/i.test(s)) return false;
+    return true;
+  };
+
+  const addTopic = (subj: string, chap: string, name: string) => {
+    const cleanName = name
+      .replace(/^[-*•–—\d.()\[\]]+\s*/, '') // strip leading bullets/numbers
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!isValidTopicName(cleanName)) return;
+
+    // Detect difficulty from keyword matching
+    const testText = `${chap} ${cleanName}`.toLowerCase();
+    const isHard = /(calculus|quantum|algorithm|proof|architecture|theorem|compiler|dynamic programming|complexity|integration|derivative|matrix|rotational|inertia|optimization|electromagnetism|derivation|concurrent|deadlock|normalization|cryptography|differential|eigenvalue)/i.test(testText);
+    const isEasy = /(intro|basics|overview|history|fundamentals|syntax|getting started|definition|principles|terms|types of|what is|classification|introduction)/i.test(testText);
+    const difficulty: Difficulty = isHard ? 'hard' : isEasy ? 'easy' : 'medium';
+    const estimatedHours = isHard ? 2.5 : isEasy ? 1.0 : 1.5;
+
+    const chapMap = getChapterMap(subj);
+    if (!chapMap.has(chap)) chapMap.set(chap, []);
+    chapMap.get(chap)!.push({
+      topicName: cleanName,
+      difficulty,
+      estimatedHours,
+      prerequisites: [],
+    });
   };
 
   for (const line of lines) {
     // Subject header: e.g. "Subject: Biology" or "# Biology"
     const subjectMatch = line.match(/^(?:subject|course|module)\s*:\s*(.+)$/i) || line.match(/^#\s+(.+)$/);
     if (subjectMatch) {
-      flushChapter();
-      currentSubject = subjectMatch[1].trim();
-      currentChapter = 'Introduction & Core Concepts';
+      currentSubjectName = subjectMatch[1].trim();
+      currentChapterName = 'Introduction & Core Concepts';
       continue;
     }
 
@@ -137,61 +223,68 @@ function parseTextLocally(text: string, titleHint?: string): ParsedSyllabus {
     const chapterMatch =
       line.match(/^(?:unit|chapter|part|section|module)\s*[0-9ivxlcdmIVXLCDM]*[\s.:-]+\s*(.+)$/i) ||
       line.match(/^##\s+(.+)$/) ||
-      line.match(/^([A-Z0-9\s-]{4,}):$/);
+      line.match(/^([A-Z][A-Z0-9\s&-]{3,}):$/);
 
     if (chapterMatch) {
-      flushChapter();
-      currentChapter = chapterMatch[1].trim();
+      currentChapterName = chapterMatch[1].trim();
       continue;
     }
 
-    // Subtopic or bullet
-    const bulletMatch = line.match(/^[-*•–—\d.]+\s*(.+)$/);
+    // Class/Grade + Subject line: "Class 12 Physics" or "Grade 10 - Mathematics"
+    const classSubjectMatch = line.match(/^(?:class|grade|std|standard)\s*(\d+|[XIVLCDM]+)\s*[-–:]?\s*(.+)$/i);
+    if (classSubjectMatch) {
+      const grade = classSubjectMatch[1];
+      const subj = classSubjectMatch[2].trim();
+      currentSubjectName = `${subj} (Class ${grade})`;
+      currentChapterName = 'Core Topics';
+      continue;
+    }
+
+    // Comma/semicolon split: ONLY apply if ALL resulting fragments look like valid topic names.
+    // This prevents splitting prose sentences like "underlying biology, to everyday life such as..."
+    if (line.includes(',') || line.includes(';')) {
+      const parts = line.split(/[,;]/).map((p) => p.trim()).filter((p) => p.length > 3 && p.length < 70);
+      const validParts = parts.filter(isValidTopicName);
+      // Only use comma-split if at least 70% of parts are valid topic names
+      if (parts.length > 1 && validParts.length >= Math.ceil(parts.length * 0.7)) {
+        validParts.forEach((p) => addTopic(currentSubjectName, currentChapterName, p));
+        continue;
+      }
+      // Otherwise fall through and treat the whole line as one item
+    }
+
+    // Bullet or numbered list item — strongest signal for a topic
+    const bulletMatch = line.match(/^[-*•–—\d.]+\s+(.+)$/);
     if (bulletMatch) {
-      currentSubTopics.push(bulletMatch[1].trim());
-    } else if (line.length < 90 && !line.endsWith('.')) {
-      // Short line likely to be a topic or subtopic
-      if (currentSubTopics.length === 0) {
-        currentChapter = line;
-      } else {
-        currentSubTopics.push(line);
-      }
-    } else {
-      // Split comma or semicolon separated items
-      const subParts = line.split(/[,;]/).map((p) => p.trim()).filter((p) => p.length > 2 && p.length < 60);
-      if (subParts.length > 1) {
-        currentSubTopics.push(...subParts);
-      } else {
-        currentSubTopics.push(line.slice(0, 75));
-      }
+      addTopic(currentSubjectName, currentChapterName, bulletMatch[1]);
+      continue;
+    }
+
+    // Short non-sentence lines that look like topic names
+    if (line.length < 75 && !line.endsWith('.') && !line.endsWith(',')) {
+      addTopic(currentSubjectName, currentChapterName, line);
     }
   }
 
-  flushChapter();
-
-  // If no structured items were caught, treat non-empty lines as topics
-  if (items.length === 0) {
-    const defaultTopics = lines.slice(0, 15).map((l) => l.replace(/^[-*•\s]+/, '').slice(0, 50));
-    items.push({
-      subject: currentSubject,
-      chapter: 'Core Syllabus Topics',
-      subTopics: defaultTopics.length > 0 ? defaultTopics : ['Key Concepts', 'Practical Applications', 'Review & Practice'],
-      complexity: 'medium',
-      estimatedHours: 15,
-    });
+  // Construct subjects array
+  const rawSubjects: any[] = [];
+  for (const [subjName, chaps] of subjectsMap.entries()) {
+    const chapters: any[] = [];
+    for (const [chapName, topics] of chaps.entries()) {
+      if (topics.length > 0) {
+        chapters.push({ chapterName: chapName, topics });
+      }
+    }
+    if (chapters.length > 0) {
+      rawSubjects.push({ subjectName: subjName, chapters });
+    }
   }
 
-  const coloredItems = assignSubjectColors(items);
-  const totalHours = coloredItems.reduce((acc, i) => acc + i.estimatedHours, 0);
-
-  return {
-    id: `local_${Date.now()}`,
-    title: titleHint || currentSubject,
-    source: 'local-parser',
-    items: coloredItems,
-    totalHours,
-    parseConfidence: 0.85,
-  };
+  return normalizeToParsedSyllabus(
+    { title: titleHint || currentSubjectName, subjects: rawSubjects },
+    titleHint,
+    'local-parser',
+  );
 }
 
 // ─── Gemini AI Parser ──────────────────────────────────────────────────────────
@@ -200,34 +293,27 @@ async function parseWithGemini(
   payload: { mimeType?: string; base64Data?: string; text?: string },
   titleHint?: string,
 ): Promise<ParsedSyllabus> {
-  const prompt = `You are an expert academic curriculum parser.
-Extract the syllabus/document into a strictly CHAPTERWISE, sequential JSON curriculum.
-Requirements:
-1. Identify overall Title (e.g. "Senior Secondary Biology 2025-26" or hint: "${titleHint || 'Custom Syllabus'}").
-2. Group all topics strictly in sequential Chapter order (e.g. Chapter 1, Chapter 2, Chapter 3...). Do NOT skip or reorder chapters!
-3. For each chapter:
-   - "chapter": Include Chapter number and full name (e.g. "Chapter 1: Sexual Reproduction in Flowering Plants", "Chapter 2: Human Reproduction")
-   - "subTopics": Array of 3 to 6 specific subtopics to study sequentially (e.g. ["Pre-fertilization: Structures & Events", "Pollination & Pollen-Pistil Interaction", "Double Fertilization", "Post-fertilization: Embryo & Endosperm", "Seeds, Fruits & Apomixis"])
-   - "estimatedHours": Realistic study hours to complete this chapter (integer between 6 and 18)
-   - "complexity": 'easy' | 'medium' | 'hard'
-4. Estimate your parseConfidence as a number between 0.75 and 0.98 based on document clarity.
-5. Return ONLY valid JSON matching this schema:
-{
-  "title": "string",
-  "parseConfidence": number,
-  "items": [
-    {
-      "subject": "string",
-      "chapter": "string",
-      "subTopics": ["string"],
-      "complexity": "easy" | "medium" | "hard",
-      "estimatedHours": number
-    }
-  ]
-}`;
-
   const contents: any[] = [];
-  const parts: any[] = [{ text: prompt }];
+
+  // Detect if this is bare chapter/class info input (no detailed topic lists)
+  const inputText = payload.text || titleHint || '';
+  const isBareChapterInput = !payload.base64Data && (
+    inputText.length < 500 || // Short input = likely bare chapter names
+    /class\s*\d|grade\s*\d|chapter|unit|cbse|jee|neet|upsc|semester|\bsem\b/i.test(inputText)
+  ) && !inputText.includes('\n\n') // No long paragraphs
+    || inputText.split('\n').filter(l => l.trim()).length < 8; // Very few lines
+
+  const userPromptText = isBareChapterInput
+    ? `The following is a list of chapter names / subject headings. USE YOUR INTERNAL ACADEMIC KNOWLEDGE DATABASE to expand each chapter into granular sub-topics as they are taught in standard textbooks. Generate 4-8 detailed sub-topics per chapter with accurate difficulty levels (easy/medium/hard) and estimated study hours. DO NOT use the chapter name as a topic.
+
+Input:
+${inputText || titleHint || 'General Studies'}`
+    : `Parse the following syllabus/document into granular sub-topics with difficulty ratings and estimated hours. For any chapter that lacks detail, USE YOUR KNOWLEDGE to fill in standard academic sub-topics:
+
+Document Content:
+${payload.text || ''}`;
+
+  const parts: any[] = [{ text: userPromptText }];
 
   if (payload.base64Data && payload.mimeType) {
     parts.push({
@@ -238,26 +324,22 @@ Requirements:
     });
   }
 
-  if (payload.text) {
-    parts.push({ text: `Document Text Content:\n${payload.text}` });
-  }
-
   contents.push({ parts });
 
-  // Try models in order of priority (valid Google Gemini model identifiers)
+  // Try models in order of priority (verified against ListModels API)
   const modelsToTry = [
     'gemini-2.5-flash',
     'gemini-2.5-flash-lite',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
-    'gemini-1.5-pro',
+    'gemini-flash-latest',
+    'gemini-pro-latest',
+    'gemini-flash-lite-latest',
   ];
 
   let lastError = '';
   for (const modelId of modelsToTry) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeout = setTimeout(() => controller.abort(), 16000);
 
     let res: Response;
     try {
@@ -268,6 +350,9 @@ Requirements:
           'x-goog-api-key': apiKey,
         },
         body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: SYSTEM_INSTRUCTION }],
+          },
           contents,
           generationConfig: {
             responseMimeType: 'application/json',
@@ -292,17 +377,7 @@ Requirements:
       const cleaned = rawResponseText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
       const parsed = JSON.parse(cleaned);
 
-      const coloredItems = assignSubjectColors(parsed.items || []);
-      const totalHours = coloredItems.reduce((acc, i) => acc + (i.estimatedHours || 10), 0);
-
-      return {
-        id: `gemini_${Date.now()}`,
-        title: parsed.title || titleHint || 'Analyzed Syllabus',
-        source: 'gemini-ai',
-        items: coloredItems,
-        totalHours,
-        parseConfidence: Math.min(0.98, Math.max(0.6, parsed.parseConfidence || 0.9)),
-      };
+      return normalizeToParsedSyllabus(parsed, titleHint, 'gemini-ai');
     }
 
     const errText = await res.text();
@@ -319,31 +394,15 @@ async function parseWithOpenAI(
   payload: { mimeType?: string; base64Data?: string; text?: string },
   titleHint?: string,
 ): Promise<ParsedSyllabus> {
-  const prompt = `You are an expert curriculum parser. Extract syllabus into structured JSON.
-Return JSON with schema:
-{
-  "title": "string",
-  "parseConfidence": number (0.7-0.98),
-  "items": [
-    {
-      "subject": "string",
-      "chapter": "string",
-      "subTopics": ["string"],
-      "complexity": "easy" | "medium" | "hard",
-      "estimatedHours": number
-    }
-  ]
-}`;
-
   const messages: any[] = [
-    { role: 'system', content: 'You extract academic syllabi into strict JSON.' },
+    { role: 'system', content: SYSTEM_INSTRUCTION },
   ];
 
   if (payload.base64Data && payload.mimeType) {
     messages.push({
       role: 'user',
       content: [
-        { type: 'text', text: prompt },
+        { type: 'text', text: 'Extract this document into granular topics with difficulty levels and estimated hours matching the schema.' },
         {
           type: 'image_url',
           image_url: {
@@ -355,7 +414,7 @@ Return JSON with schema:
   } else {
     messages.push({
       role: 'user',
-      content: `${prompt}\n\nDocument Text:\n${payload.text || ''}`,
+      content: `Extract the following syllabus into granular topics with difficulty levels and estimated hours:\n\n${payload.text || ''}`,
     });
   }
 
@@ -382,17 +441,7 @@ Return JSON with schema:
   const rawText = json?.choices?.[0]?.message?.content;
   const parsed = JSON.parse(rawText);
 
-  const coloredItems = assignSubjectColors(parsed.items || []);
-  const totalHours = coloredItems.reduce((acc, i) => acc + (i.estimatedHours || 10), 0);
-
-  return {
-    id: `openai_${Date.now()}`,
-    title: parsed.title || titleHint || 'Analyzed Syllabus',
-    source: 'openai',
-    items: coloredItems,
-    totalHours,
-    parseConfidence: Math.min(0.98, Math.max(0.6, parsed.parseConfidence || 0.9)),
-  };
+  return normalizeToParsedSyllabus(parsed, titleHint, 'openai');
 }
 
 // ─── API Route Handler ─────────────────────────────────────────────────────────
