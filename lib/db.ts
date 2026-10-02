@@ -1,7 +1,8 @@
 /**
  * lib/db.ts
  * SQLite database layer using better-sqlite3.
- * Works locally. On Netlify/serverless, returns a no-op stub.
+ * Works locally. On Netlify/Vercel serverless, returns null because the
+ * function filesystem is ephemeral; browser state remains in localStorage.
  */
 
 // Detect serverless environment (Netlify, Vercel, etc.)

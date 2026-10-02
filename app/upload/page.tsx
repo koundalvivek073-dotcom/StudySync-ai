@@ -479,12 +479,22 @@ Class 12 Chemistry
             </div>
             <div className="glass p-3 rounded-lg flex items-center justify-between gap-2.5 text-xs text-[#888baa]">
               <span>Try pasting your syllabus text directly for instant chapter extraction.</span>
-              <button
-                onClick={() => { setInputMode('paste'); setParseState('idle'); }}
-                className="btn btn-primary text-xs py-1 px-3"
-              >
-                Switch to Paste Tab
-              </button>
+              <div className="flex items-center gap-2">
+                {inputMode === 'file' && file && (
+                  <button
+                    onClick={() => { setError(null); setParseState('idle'); }}
+                    className="btn btn-primary text-xs py-1 px-3"
+                  >
+                    Try Again
+                  </button>
+                )}
+                <button
+                  onClick={() => { setInputMode('paste'); setParseState('idle'); }}
+                  className="btn btn-primary text-xs py-1 px-3"
+                >
+                  Switch to Paste Tab
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -499,10 +509,12 @@ Class 12 Chemistry
               <div className="sm:ml-auto flex items-center gap-2">
                 {result.source === 'demo' ? (
                   <span className="badge badge-secondary text-xs">Sample / Demo Data</span>
-                ) : (
+                ) : result.source === 'gemini-ai' || result.source === 'openai' ? (
                   <span className="badge badge-primary text-xs">
-                    {(result.parseConfidence * 100).toFixed(0)}% genuine confidence
+                    {(result.parseConfidence * 100).toFixed(0)}% AI confidence
                   </span>
+                ) : (
+                  <span className="badge badge-secondary text-xs">Fallback estimates</span>
                 )}
                 <span className="text-xs text-[#888baa]">
                   {result.source === 'gemini-ai'

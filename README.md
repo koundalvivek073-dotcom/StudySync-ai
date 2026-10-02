@@ -4,25 +4,25 @@
 
 Upload your syllabus → Answer 5 lifestyle questions → Get a personalized timetable → Export as PDF.
 
-## 🌐 Live Demo
-
-👉 **[https://study-sync-ai.netlify.app/](https://study-sync-ai.netlify.app/)**
-
-| Page | URL |
-|------|-----|
-| 🏠 Home | https://study-sync-ai.netlify.app/ |
-| 📄 Upload Syllabus | https://study-sync-ai.netlify.app//upload |
-| 🧘 Questionnaire | https://study-sync-ai.netlify.app//questionnaire |
-| 📅 Dashboard | https://study-sync-ai.netlify.app//dashboard |
-
 ## Quick Start (Local)
 
 ```bash
-cd "d:\Timetable maker\studysync"
+npm ci
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
+
+## Deploy to Vercel
+
+1. Push this repository to GitHub and [import it into Vercel](https://vercel.com/new).
+2. Keep the project root directory set to the repository root. Vercel detects Next.js automatically; use `npm run build` as the build command.
+3. In **Project Settings → Environment Variables**, add:
+   - `GEMINI_API_KEY` — your key from [Google AI Studio](https://aistudio.google.com/app/apikey). Keep this server-only; do not prefix it with `NEXT_PUBLIC_`.
+   - `NEXT_PUBLIC_USE_MOCK_AI` — set to `false` to use Gemini.
+4. Redeploy after adding the environment variables.
+
+The syllabus AI route allows up to 60 seconds for PDF analysis. SQLite persistence is disabled on Vercel because function storage is ephemeral; the timetable and syllabus are kept in the visitor's browser using local storage. They do not sync between devices or browsers.
 
 ## Features
 
@@ -57,12 +57,6 @@ store/
 └── appStore.ts           ← Zustand global state (localStorage persisted)
 ```
 
-## Adding Real AI (Optional)
-
-1. Set `NEXT_PUBLIC_USE_MOCK_AI=false` in `.env.local`
-2. Add `OPENAI_API_KEY=sk-...` to `.env.local`
-3. Implement `/app/api/parse-syllabus/route.ts` using OpenAI Vision
-
 ## Tech Stack
 
 - **Next.js 16** + TypeScript + Tailwind CSS v4
@@ -72,4 +66,4 @@ store/
 - **react-dropzone** — file drag & drop
 - **date-fns** — date manipulation
 - **lucide-react** — icons
-- **Netlify** — hosting with `@netlify/plugin-nextjs`
+- **Vercel** — hosting and Next.js deployment

@@ -427,6 +427,14 @@ function getClientGeminiKey(): string | null {
 /** Parse a real file via the API route with automatic smart fallback. */
 export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
   const fileName = file.name.replace(/\.[^/.]+$/, '');
+  const lowerFileName = file.name.toLowerCase();
+  const isTextFile =
+    file.type.startsWith('text/') ||
+    lowerFileName.endsWith('.txt') ||
+    lowerFileName.endsWith('.md') ||
+    lowerFileName.endsWith('.json');
+  const isDocumentUpload = !isTextFile;
+
   try {
     const formData = new FormData();
     formData.append('file', file);
@@ -444,18 +452,32 @@ export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
       body: formData,
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.items && data.items.length > 0) {
-        return {
-          ...data,
-          id: data.id ?? `upload_${Date.now()}`,
-          source: data.source ?? file.name,
-        } as ParsedSyllabus;
-      }
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(
+        typeof data?.error === 'string'
+          ? data.error
+          : `Syllabus analysis failed (${res.status}). Please try again.`,
+      );
     }
+
+    const data = await res.json();
+    if (data && data.items && data.items.length > 0) {
+      return {
+        ...data,
+        id: data.id ?? `upload_${Date.now()}`,
+        source: data.source ?? file.name,
+      } as ParsedSyllabus;
+    }
+
+    throw new Error('The syllabus analyzer returned no study topics. Please try again.');
   } catch (err) {
     console.warn('API parsing encountered issue, engaging smart curriculum engine:', err);
+    if (isDocumentUpload) {
+      throw err instanceof Error
+        ? err
+        : new Error('Could not analyze the document. Please try again or paste its syllabus text.');
+    }
   }
 
   // Seamless client fallback: guarantee a structured syllabus is returned

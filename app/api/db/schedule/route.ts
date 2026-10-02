@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
     if (!sessionId) return NextResponse.json({ ok: false, error: 'sessionId required' }, { status: 400 });
 
     const db = getDb();
+    if (!db) return NextResponse.json({ ok: false, error: 'DB not available in this environment' }, { status: 503 });
     const rows: any[] = db.prepare(
       'SELECT * FROM schedule_blocks WHERE session_id = ? ORDER BY date, start_time'
     ).all(sessionId);
