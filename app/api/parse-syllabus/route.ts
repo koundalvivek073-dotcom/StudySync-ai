@@ -391,9 +391,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const geminiQuotaReached = /429|quota|RESOURCE_EXHAUSTED|rate.?limit/i.test(geminiFailure);
+    if (geminiQuotaReached && !payload.base64Data) {
+      return NextResponse.json(
+        { error: 'Gemini has reached its API quota across the available models. Check your Google AI Studio quota, then retry.' },
+        { status: 429 },
+      );
+    }
+
     if (payload.base64Data) {
-      const error = /429|quota|RESOURCE_EXHAUSTED/i.test(geminiFailure)
-        ? 'Gemini has reached its API quota. Check your Google AI Studio quota, then retry this document.'
+      const error = geminiQuotaReached
+        ? 'Gemini has reached its API quota across the available models. Check your Google AI Studio quota, then retry this document.'
         : /503|UNAVAILABLE/i.test(geminiFailure)
           ? 'Gemini is temporarily busy. Please retry this document in a moment.'
           : /fewer than three|did not return|could not identify|unusable syllabus/i.test(geminiFailure)

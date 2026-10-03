@@ -264,17 +264,23 @@ export function parseTextLocally(text: string, titleHint?: string): ParsedSyllab
     }
 
     const chapterMatch =
-      line.match(/^(?:unit|chapter|part|section|module)\s*[0-9ivxlcdmIVXLCDM]*[\s.:-]+\s*(.+)$/i) ||
+      line.match(/^(?:ch(?:apter)?|unit|part|section|module)\.?\s*(?:[0-9ivxlcdmIVXLCDM]+)?\s*[-–.:]\s*(.+)$/i) ||
       line.match(/^##\s+(.+)$/) ||
       line.match(/^([A-Z][A-Z0-9\s&-]{3,}):$/);
     if (chapterMatch) {
       currentChapterName = chapterMatch[1].trim();
+      const chapterMap = getChapterMap(currentSubjectName);
+      if (!chapterMap.has(currentChapterName)) chapterMap.set(currentChapterName, []);
       continue;
     }
 
-    const classSubjectMatch = line.match(/^(?:class|grade|std|standard)\s*(\d+|[XIVLCDM]+)\s*[-–:]?\s*(.+)$/i);
+    const classSubjectMatch = line.match(
+      /^(?:class|grade|std|standard)\s*[-–:]?\s*(\d{1,2})(?:st|nd|rd|th)?(?:\s*[-–:]\s*(.+)|\s+(.+))?$/i,
+    );
     if (classSubjectMatch) {
-      currentSubjectName = `${classSubjectMatch[2].trim()} (Class ${classSubjectMatch[1]})`;
+      const grade = classSubjectMatch[1];
+      const subjectName = (classSubjectMatch[2] || classSubjectMatch[3] || '').trim();
+      currentSubjectName = subjectName ? `${subjectName} (Class ${grade})` : `Class ${grade}`;
       currentChapterName = 'Core Topics';
       continue;
     }
@@ -299,14 +305,23 @@ export function parseTextLocally(text: string, titleHint?: string): ParsedSyllab
     }
   }
 
+  for (const [subjectName, chapterMap] of subjectsMap) {
+    for (const [chapterName, topics] of chapterMap) {
+      if (topics.length === 0) addTopic(subjectName, chapterName, chapterName);
+    }
+  }
+
   const subjects = Array.from(subjectsMap, ([subjectName, chapterMap]) => ({
     subjectName,
     chapters: Array.from(chapterMap, ([chapterName, topics]) => ({ chapterName, topics })),
   }));
 
+  const classTitleMatch = titleHint?.match(/^(?:class|grade)\s*[-–:]?\s*(\d{1,2})(?:st|nd|rd|th)?$/i);
+  const title = classTitleMatch ? `Class ${classTitleMatch[1]} Syllabus` : titleHint || currentSubjectName;
+
   return normalizeToParsedSyllabus(
-    { title: titleHint || currentSubjectName, subjects },
-    titleHint,
+    { title, subjects },
+    title,
     'local-parser',
   );
 }
@@ -593,7 +608,7 @@ export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
   return generateSmartCurriculum(fileName);
 }
 
-/** Parse raw text or pasted syllabus notes via the API route with automatic smart fallback. */
+/** Parse raw text or chapter names with AI, using the local parser for non-quota failures. */
 export async function parseTextWithAPI(text: string, title = 'Pasted Syllabus'): Promise<ParsedSyllabus> {
   try {
     const geminiKey = getClientGeminiKey();
@@ -610,7 +625,13 @@ export async function parseTextWithAPI(text: string, title = 'Pasted Syllabus'):
 
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      console.warn('Text API parsing failed; parsing entered text locally:', data?.error ?? res.statusText);
+      const message = typeof data?.error === 'string'
+        ? data.error
+        : `Syllabus analysis failed (${res.status}).`;
+      if (res.status === 429 || /quota|RESOURCE_EXHAUSTED|rate.?limit/i.test(message)) {
+        throw new Error(message);
+      }
+      console.warn('Text API parsing failed; parsing entered text locally:', message);
     } else {
       const data = await res.json();
       if (data && data.items && data.items.length > 0) {
@@ -622,6 +643,9 @@ export async function parseTextWithAPI(text: string, title = 'Pasted Syllabus'):
       }
     }
   } catch (err) {
+    if (err instanceof Error && /quota|RESOURCE_EXHAUSTED|rate.?limit/i.test(err.message)) {
+      throw err;
+    }
     console.warn('Text API parsing encountered an issue; parsing entered text locally:', err);
   }
 
