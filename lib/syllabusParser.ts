@@ -202,6 +202,115 @@ export function normalizeToParsedSyllabus(raw: any, titleHint?: string, source =
   };
 }
 
+/** Parse syllabus text locally when the API or AI provider is unavailable. */
+export function parseTextLocally(text: string, titleHint?: string): ParsedSyllabus {
+  const cleaned = text
+    .replace(/https?:\/\/[^\s]+/gi, '')
+    .replace(/www\.[^\s]+/gi, '')
+    .replace(/(?:grading|weightage|attendance|policy|academic integrity|office hours)[\s\S]*?(?=\n\n|\n[A-Z]|$)/gi, '');
+
+  const lines = cleaned
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !/^page \d+/i.test(line));
+
+  let currentSubjectName = titleHint?.replace(/\.[^/.]+$/, '').trim() || 'General Studies';
+  let currentChapterName = 'Overview & Core Fundamentals';
+  const subjectsMap = new Map<string, Map<string, GranularTopic[]>>();
+
+  const getChapterMap = (subject: string) => {
+    if (!subjectsMap.has(subject)) subjectsMap.set(subject, new Map());
+    return subjectsMap.get(subject)!;
+  };
+
+  const isValidTopicName = (name: string): boolean => {
+    const trimmedName = name.trim();
+    if (trimmedName.length < 4 || trimmedName.length > 80) return false;
+    const wordCount = trimmedName.split(/\s+/).length;
+    if (wordCount === 1 && trimmedName.length < 6) return false;
+    if (/^(to |as |and |or |that |which |such |with |from |for |of |in |a |an |the |is |are |was |were |be |been|by |at |on |into |also |both |all |its |this |these |those |their |it |we |you |they )/i.test(trimmedName)) return false;
+    if (/\b(that are|which are|as well as|common to|such as|in order to|the principles of|the study of|refers to|is defined as|can be used|will be|should be|applies to)\b/i.test(trimmedName)) return false;
+    if (/^(however|therefore|furthermore|additionally|moreover|although|because|since|while|when|simple|clear|underlying|general|main|key|basic)\s*$/i.test(trimmedName)) return false;
+    return true;
+  };
+
+  const addTopic = (subject: string, chapter: string, name: string) => {
+    const cleanName = name
+      .replace(/^[-*•–—\d.()\[\]]+\s*/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!isValidTopicName(cleanName)) return;
+
+    const testText = `${chapter} ${cleanName}`.toLowerCase();
+    const isHard = /(calculus|quantum|algorithm|proof|architecture|theorem|compiler|dynamic programming|complexity|integration|derivative|matrix|rotational|inertia|optimization|electromagnetism|derivation|concurrent|deadlock|normalization|cryptography|differential|eigenvalue)/i.test(testText);
+    const isEasy = /(intro|basics|overview|history|fundamentals|syntax|getting started|definition|principles|terms|types of|what is|classification|introduction)/i.test(testText);
+    const difficulty: Difficulty = isHard ? 'hard' : isEasy ? 'easy' : 'medium';
+    const chapterMap = getChapterMap(subject);
+    if (!chapterMap.has(chapter)) chapterMap.set(chapter, []);
+    chapterMap.get(chapter)!.push({
+      topicName: cleanName,
+      difficulty,
+      estimatedHours: isHard ? 2.5 : isEasy ? 1.0 : 1.5,
+      prerequisites: [],
+    });
+  };
+
+  for (const line of lines) {
+    const subjectMatch = line.match(/^(?:subject|course|module)\s*:\s*(.+)$/i) || line.match(/^#\s+(.+)$/);
+    if (subjectMatch) {
+      currentSubjectName = subjectMatch[1].trim();
+      currentChapterName = 'Introduction & Core Concepts';
+      continue;
+    }
+
+    const chapterMatch =
+      line.match(/^(?:unit|chapter|part|section|module)\s*[0-9ivxlcdmIVXLCDM]*[\s.:-]+\s*(.+)$/i) ||
+      line.match(/^##\s+(.+)$/) ||
+      line.match(/^([A-Z][A-Z0-9\s&-]{3,}):$/);
+    if (chapterMatch) {
+      currentChapterName = chapterMatch[1].trim();
+      continue;
+    }
+
+    const classSubjectMatch = line.match(/^(?:class|grade|std|standard)\s*(\d+|[XIVLCDM]+)\s*[-–:]?\s*(.+)$/i);
+    if (classSubjectMatch) {
+      currentSubjectName = `${classSubjectMatch[2].trim()} (Class ${classSubjectMatch[1]})`;
+      currentChapterName = 'Core Topics';
+      continue;
+    }
+
+    if (line.includes(',') || line.includes(';')) {
+      const parts = line.split(/[,;]/).map((part) => part.trim()).filter((part) => part.length > 3 && part.length < 70);
+      const validParts = parts.filter(isValidTopicName);
+      if (parts.length > 1 && validParts.length >= Math.ceil(parts.length * 0.7)) {
+        validParts.forEach((part) => addTopic(currentSubjectName, currentChapterName, part));
+        continue;
+      }
+    }
+
+    const bulletMatch = line.match(/^[-*•–—\d.]+\s+(.+)$/);
+    if (bulletMatch) {
+      addTopic(currentSubjectName, currentChapterName, bulletMatch[1]);
+      continue;
+    }
+
+    if (line.length < 75 && !line.endsWith('.') && !line.endsWith(',')) {
+      addTopic(currentSubjectName, currentChapterName, line);
+    }
+  }
+
+  const subjects = Array.from(subjectsMap, ([subjectName, chapterMap]) => ({
+    subjectName,
+    chapters: Array.from(chapterMap, ([chapterName, topics]) => ({ chapterName, topics })),
+  }));
+
+  return normalizeToParsedSyllabus(
+    { title: titleHint || currentSubjectName, subjects },
+    titleHint,
+    'local-parser',
+  );
+}
+
 // ─── Granular Mock Syllabi ────────────────────────────────────────────────────
 
 const RAW_MOCK_DATA = [
@@ -499,7 +608,10 @@ export async function parseTextWithAPI(text: string, title = 'Pasted Syllabus'):
       body: JSON.stringify({ text, title }),
     });
 
-    if (res.ok) {
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      console.warn('Text API parsing failed; parsing entered text locally:', data?.error ?? res.statusText);
+    } else {
       const data = await res.json();
       if (data && data.items && data.items.length > 0) {
         return {
@@ -510,11 +622,10 @@ export async function parseTextWithAPI(text: string, title = 'Pasted Syllabus'):
       }
     }
   } catch (err) {
-    console.warn('Text API parsing encountered issue, engaging smart curriculum engine:', err);
+    console.warn('Text API parsing encountered an issue; parsing entered text locally:', err);
   }
 
-  // Seamless client fallback: guarantee a structured syllabus is returned
-  return generateSmartCurriculum(title || text.slice(0, 40));
+  return parseTextLocally(text, title || text.slice(0, 40));
 }
 
 /** Main entry point: uses real API parsing by default so uploaded notes (Maths, JS, etc.) are accurately analyzed. */

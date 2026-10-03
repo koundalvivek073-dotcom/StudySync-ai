@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  ParsedSyllabus,
-  SyllabusItem,
-  Difficulty,
-  SubjectItem,
-  ChapterItem,
-  GranularTopic,
-} from '@/lib/types';
+import { ParsedSyllabus } from '@/lib/types';
 import { generateSmartCurriculum } from '@/lib/curriculumGenerator';
+import { parseTextLocally } from '@/lib/syllabusParser';
 
 export const maxDuration = 60;
-
-const SUBJECT_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316',
-  '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6',
-  '#a855f7', '#d946ef', '#fb923c', '#facc15', '#4ade80',
-];
 
 const SYSTEM_INSTRUCTION = `You are a World-Class Academic Curriculum Expert and AI Engineer with encyclopedic knowledge of all school/college syllabi worldwide (CBSE, ICSE, IB, IGCSE, JEE, NEET, UPSC, University curricula, etc.).
 
@@ -85,149 +73,6 @@ STRICT PEDAGOGICAL & EXTRACTION RULES:
 }`;
 
 import { normalizeToParsedSyllabus } from '@/lib/syllabusParser';
-
-// ─── Local Text Fallback Parser ────────────────────────────────────────────────
-function parseTextLocally(text: string, titleHint?: string): ParsedSyllabus {
-  // 1. Strip raw URLs, course policy text, grading percentages
-  const cleaned = text
-    .replace(/https?:\/\/[^\s]+/gi, '')
-    .replace(/www\.[^\s]+/gi, '')
-    .replace(/(?:grading|weightage|attendance|policy|academic integrity|office hours)[\s\S]*?(?=\n\n|\n[A-Z]|$)/gi, '');
-
-  const lines = cleaned
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0 && !/^page \d+/i.test(l));
-
-  let currentSubjectName = titleHint?.replace(/\.[^/.]+$/, '').trim() || 'General Studies';
-  let currentChapterName = 'Overview & Core Fundamentals';
-  const subjectsMap = new Map<string, Map<string, GranularTopic[]>>();
-
-  const getChapterMap = (subj: string) => {
-    if (!subjectsMap.has(subj)) subjectsMap.set(subj, new Map());
-    return subjectsMap.get(subj)!;
-  };
-
-  /**
-   * Validates that a string looks like an academic topic name, NOT a prose sentence fragment.
-   * Rejects: connector-word starts, prose sentence patterns, single filler words, extremes of length.
-   */
-  const isValidTopicName = (n: string): boolean => {
-    const s = n.trim();
-    if (s.length < 4 || s.length > 80) return false;
-    const wordCount = s.split(/\s+/).length;
-    // Single words only valid if 6+ chars (e.g. "Calculus", "Genetics")
-    if (wordCount === 1 && s.length < 6) return false;
-    // Reject lines starting with lowercase connectors / prepositions / articles
-    if (/^(to |as |and |or |that |which |such |with |from |for |of |in |a |an |the |is |are |was |were |be |been|by |at |on |into |also |both |all |its |this |these |those |their |it |we |you |they )/i.test(s)) return false;
-    // Reject prose sentence patterns
-    if (/\b(that are|which are|as well as|common to|such as|in order to|the principles of|the study of|refers to|is defined as|can be used|will be|should be|applies to)\b/i.test(s)) return false;
-    // Reject standalone filler words
-    if (/^(however|therefore|furthermore|additionally|moreover|although|because|since|while|when|simple|clear|underlying|general|main|key|basic)\s*$/i.test(s)) return false;
-    return true;
-  };
-
-  const addTopic = (subj: string, chap: string, name: string) => {
-    const cleanName = name
-      .replace(/^[-*•–—\d.()\[\]]+\s*/, '') // strip leading bullets/numbers
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (!isValidTopicName(cleanName)) return;
-
-    // Detect difficulty from keyword matching
-    const testText = `${chap} ${cleanName}`.toLowerCase();
-    const isHard = /(calculus|quantum|algorithm|proof|architecture|theorem|compiler|dynamic programming|complexity|integration|derivative|matrix|rotational|inertia|optimization|electromagnetism|derivation|concurrent|deadlock|normalization|cryptography|differential|eigenvalue)/i.test(testText);
-    const isEasy = /(intro|basics|overview|history|fundamentals|syntax|getting started|definition|principles|terms|types of|what is|classification|introduction)/i.test(testText);
-    const difficulty: Difficulty = isHard ? 'hard' : isEasy ? 'easy' : 'medium';
-    const estimatedHours = isHard ? 2.5 : isEasy ? 1.0 : 1.5;
-
-    const chapMap = getChapterMap(subj);
-    if (!chapMap.has(chap)) chapMap.set(chap, []);
-    chapMap.get(chap)!.push({
-      topicName: cleanName,
-      difficulty,
-      estimatedHours,
-      prerequisites: [],
-    });
-  };
-
-  for (const line of lines) {
-    // Subject header: e.g. "Subject: Biology" or "# Biology"
-    const subjectMatch = line.match(/^(?:subject|course|module)\s*:\s*(.+)$/i) || line.match(/^#\s+(.+)$/);
-    if (subjectMatch) {
-      currentSubjectName = subjectMatch[1].trim();
-      currentChapterName = 'Introduction & Core Concepts';
-      continue;
-    }
-
-    // Chapter or Unit header: e.g. "Unit VI: Reproduction", "Unit 1: Genetics", "Chapter 2: ...", "## ..."
-    const chapterMatch =
-      line.match(/^(?:unit|chapter|part|section|module)\s*[0-9ivxlcdmIVXLCDM]*[\s.:-]+\s*(.+)$/i) ||
-      line.match(/^##\s+(.+)$/) ||
-      line.match(/^([A-Z][A-Z0-9\s&-]{3,}):$/);
-
-    if (chapterMatch) {
-      currentChapterName = chapterMatch[1].trim();
-      continue;
-    }
-
-    // Class/Grade + Subject line: "Class 12 Physics" or "Grade 10 - Mathematics"
-    const classSubjectMatch = line.match(/^(?:class|grade|std|standard)\s*(\d+|[XIVLCDM]+)\s*[-–:]?\s*(.+)$/i);
-    if (classSubjectMatch) {
-      const grade = classSubjectMatch[1];
-      const subj = classSubjectMatch[2].trim();
-      currentSubjectName = `${subj} (Class ${grade})`;
-      currentChapterName = 'Core Topics';
-      continue;
-    }
-
-    // Comma/semicolon split: ONLY apply if ALL resulting fragments look like valid topic names.
-    // This prevents splitting prose sentences like "underlying biology, to everyday life such as..."
-    if (line.includes(',') || line.includes(';')) {
-      const parts = line.split(/[,;]/).map((p) => p.trim()).filter((p) => p.length > 3 && p.length < 70);
-      const validParts = parts.filter(isValidTopicName);
-      // Only use comma-split if at least 70% of parts are valid topic names
-      if (parts.length > 1 && validParts.length >= Math.ceil(parts.length * 0.7)) {
-        validParts.forEach((p) => addTopic(currentSubjectName, currentChapterName, p));
-        continue;
-      }
-      // Otherwise fall through and treat the whole line as one item
-    }
-
-    // Bullet or numbered list item — strongest signal for a topic
-    const bulletMatch = line.match(/^[-*•–—\d.]+\s+(.+)$/);
-    if (bulletMatch) {
-      addTopic(currentSubjectName, currentChapterName, bulletMatch[1]);
-      continue;
-    }
-
-    // Short non-sentence lines that look like topic names
-    if (line.length < 75 && !line.endsWith('.') && !line.endsWith(',')) {
-      addTopic(currentSubjectName, currentChapterName, line);
-    }
-  }
-
-  // Construct subjects array
-  const rawSubjects: any[] = [];
-  for (const [subjName, chaps] of subjectsMap.entries()) {
-    const chapters: any[] = [];
-    for (const [chapName, topics] of chaps.entries()) {
-      if (topics.length > 0) {
-        chapters.push({ chapterName: chapName, topics });
-      }
-    }
-    if (chapters.length > 0) {
-      rawSubjects.push({ subjectName: subjName, chapters });
-    }
-  }
-
-  return normalizeToParsedSyllabus(
-    { title: titleHint || currentSubjectName, subjects: rawSubjects },
-    titleHint,
-    'local-parser',
-  );
-}
 
 // ─── Gemini AI Parser ──────────────────────────────────────────────────────────
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -327,8 +172,26 @@ ${inputText || titleHint || 'General Studies'}`;
   contents.push({ parts });
 
   const modelsToTry = payload.base64Data
-    ? ['gemini-flash-lite-latest', 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-pro-latest']
-    : ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-pro-latest'];
+    ? [
+        'gemini-3.5-flash-lite',
+        'gemini-3.8-flash',
+        'gemini-3.7-flash',
+        'gemini-3.6-flash',
+        'gemini-3.5-flash',
+        'gemini-flash-lite-latest',
+        'gemini-flash-latest',
+        'gemini-pro-latest',
+      ]
+    : [
+        'gemini-3.8-flash',
+        'gemini-3.7-flash',
+        'gemini-3.6-flash',
+        'gemini-3.5-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-flash-latest',
+        'gemini-flash-lite-latest',
+        'gemini-pro-latest',
+      ];
 
   const deadline = Date.now() + 55000;
   let lastError = '';
@@ -390,7 +253,9 @@ ${inputText || titleHint || 'General Studies'}`;
     const errText = await res.text();
     lastError = `${modelId} (${res.status}): ${errText}`;
     console.warn(`Gemini model ${modelId} failed:`, errText.slice(0, 200));
-    if (![404, 429, 500, 502, 503].includes(res.status)) break;
+    const quotaOrRateLimitError =
+      res.status === 403 && /quota|resource_exhausted|rate.?limit/i.test(errText);
+    if (![400, 404, 429, 500, 502, 503].includes(res.status) && !quotaOrRateLimitError) break;
   }
 
   throw new Error(`All Gemini models failed. Last error: ${lastError}`);
@@ -548,14 +413,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. Graceful Fallback Engine: generate a comprehensive, intelligent syllabus
-    // based on file name, title, or topic keywords so users NEVER see an error or need an API key!
+    // 4. Only use title-based curriculum generation when no text was supplied.
     const fallbackCurriculum = generateSmartCurriculum(payload.title);
     return NextResponse.json(fallbackCurriculum);
   } catch (error: any) {
-    console.error('Unhandled error parsing syllabus, using smart fallback:', error);
-    // Even on unexpected exceptions, always provide a valid curriculum!
-    const safeCurriculum = generateSmartCurriculum('General Studies');
-    return NextResponse.json(safeCurriculum);
+    console.error('Unhandled error parsing syllabus:', error);
+    return NextResponse.json(
+      { error: 'Syllabus analysis failed. Please retry or paste the chapter names directly.' },
+      { status: 500 },
+    );
   }
 }

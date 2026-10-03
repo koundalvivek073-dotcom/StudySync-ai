@@ -6,7 +6,7 @@
 
 Turn your syllabus into a personalized, difficulty-aware timetable—built around your energy, commitments, meals, and sleep.
 
-[🚀 **Open the live app**](https://study-sync-ai-teal-seven.vercel.app/) · [✨ Features](#features) · [🛠️ Run locally](#run-locally) · [▲ Deploy to Vercel](#deploy-to-vercel)
+[🚀 **Open the live app**](https://study-sync-ai-plum.vercel.app/upload) · [✨ Features](#features) · [🛠️ Run locally](#run-locally) · [▲ Deploy to Vercel](#deploy-to-vercel)
 
 </div>
 
