@@ -1,3 +1,4 @@
+[🚀 Open Live App](https://study-sync-ai-plum.vercel.app/) · [🎬 Watch 45s Arcade Demo](Aapki_Arcade_Video_Ka_Link) · [✨ Features](#features) · [🛠️ Run Locally](#run-locally)
 <div align="center">
 
 # StudySync AI 🧠📅
