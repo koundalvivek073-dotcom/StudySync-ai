@@ -1,4 +1,11 @@
-import { ParsedSyllabus, SyllabusItem, Complexity } from './types';
+import {
+  ParsedSyllabus,
+  SyllabusItem,
+  Complexity,
+  SubjectItem,
+  ChapterItem,
+  GranularTopic,
+} from './types';
 
 const SUBJECT_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316',
@@ -440,19 +447,70 @@ export function generateSmartCurriculum(rawTitle?: string): ParsedSyllabus {
     });
   }
 
-  const structuredSubjects = Array.from(subjectsMap.entries()).map(([subjectName, chapters]) => ({
-    subjectName,
-    chapters,
-  }));
+  const subjects: SubjectItem[] = [];
+  const items: SyllabusItem[] = [];
+  let calculatedHours = 0;
+  let colorIdx = 0;
 
-  const { normalizeToParsedSyllabus } = require('./syllabusParser');
-  return normalizeToParsedSyllabus(
-    {
-      title: finalTitle,
-      subjects: structuredSubjects,
-      parseConfidence: 0.94,
-    },
-    finalTitle,
-    'smart-engine',
-  );
+  Array.from(subjectsMap.entries()).forEach(([subjectName, chaptersRaw], sIdx) => {
+    const color = SUBJECT_COLORS[colorIdx++ % SUBJECT_COLORS.length];
+    const chapters: ChapterItem[] = [];
+
+    chaptersRaw.forEach((chapRaw, cIdx) => {
+      const topics: GranularTopic[] = [];
+
+      chapRaw.topics.forEach((topRaw, tIdx) => {
+        const id = `smart_${sIdx}_${cIdx}_${tIdx}_${Date.now()}`;
+        const hours = topRaw.estimatedHours;
+        calculatedHours += hours;
+
+        const topicItem: GranularTopic = {
+          id,
+          topicName: topRaw.topicName,
+          difficulty: topRaw.difficulty,
+          estimatedHours: hours,
+          prerequisites: topRaw.prerequisites,
+          completed: 0,
+        };
+        topics.push(topicItem);
+
+        items.push({
+          id,
+          subject: subjectName,
+          chapter: chapRaw.chapterName,
+          topicName: topRaw.topicName,
+          difficulty: topRaw.difficulty,
+          complexity: topRaw.difficulty,
+          estimatedHours: hours,
+          prerequisites: topRaw.prerequisites,
+          color,
+          completed: 0,
+          subTopics: [topRaw.topicName],
+        });
+      });
+
+      chapters.push({
+        id: `chap_${sIdx}_${cIdx}_${Date.now()}`,
+        chapterName: chapRaw.chapterName,
+        topics,
+      });
+    });
+
+    subjects.push({
+      id: `subj_${sIdx}_${Date.now()}`,
+      subjectName,
+      color,
+      chapters,
+    });
+  });
+
+  return {
+    id: `syllabus_smart_${Date.now()}`,
+    title: finalTitle,
+    source: 'smart-engine',
+    subjects,
+    items,
+    totalHours: Math.round(calculatedHours * 10) / 10,
+    parseConfidence: 0.94,
+  };
 }
