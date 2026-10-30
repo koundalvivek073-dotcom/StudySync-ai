@@ -258,7 +258,7 @@ function DayView({
           const startMin = toMin(block.startTime);
           const endMin = toMin(block.endTime);
           const top = (startMin / 60) * HOUR_HEIGHT;
-          const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 18);
+          const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 0);
           const colors = getCalendarBlockColors(block);
           const ringStyle = block.type === 'study' && block.status
             ? STATUS_RING[block.status] : undefined;
@@ -269,7 +269,7 @@ function DayView({
               key={block.id}
               disabled={block.type !== 'study'}
               aria-label={`${block.label}, ${block.startTime} to ${block.endTime}, ${block.status ?? 'upcoming'}`}
-              className="planner-event absolute left-0 right-0 mx-1 rounded schedule-block group relative"
+              className="planner-event absolute left-0 right-0 mx-1 rounded schedule-block group"
               style={{
                 top, height, background: colors.background, color: '#27334a',
                 border: `1px solid ${colors.border}`,
@@ -359,7 +359,7 @@ function WeekView({
                 const startMin = toMin(block.startTime);
                 const endMin = toMin(block.endTime);
                 const top = (startMin / 60) * HOUR_HEIGHT;
-                const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 14);
+                const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 0);
                 const colors = getCalendarBlockColors(block);
                 const ringStyle = block.type === 'study' && block.status
                   ? STATUS_RING[block.status] : undefined;
@@ -370,7 +370,7 @@ function WeekView({
                     key={block.id}
                     disabled={block.type !== 'study'}
                     aria-label={`${block.label}, ${block.startTime} to ${block.endTime}, ${block.status ?? 'upcoming'}`}
-                    className="planner-event absolute inset-x-0.5 rounded schedule-block group relative"
+                    className="planner-event absolute inset-x-0.5 rounded schedule-block group"
                     style={{
                       top, height,
                       background: colors.background,
