@@ -163,6 +163,60 @@ body {
   mask-image: radial-gradient(ellipse at 50% 30%, #000 4%, transparent 76%);
 }
 
+.ambient-fireflies {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.ambient-fireflies > span {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #d7ff9a;
+  box-shadow: 0 0 7px 2px rgba(197, 238, 131, 0.48), 0 0 18px 5px rgba(113, 181, 111, 0.2);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.ambient-fireflies > span:nth-child(1) { top: 20%; left: 12%; animation: firefly-drift-a 13s 0s ease-in-out infinite; }
+.ambient-fireflies > span:nth-child(2) { top: 64%; left: 24%; animation: firefly-drift-b 16s 2s ease-in-out infinite; }
+.ambient-fireflies > span:nth-child(3) { top: 36%; left: 48%; animation: firefly-drift-c 15s 4s ease-in-out infinite; }
+.ambient-fireflies > span:nth-child(4) { top: 76%; left: 68%; animation: firefly-drift-a 18s 1s ease-in-out infinite; }
+.ambient-fireflies > span:nth-child(5) { top: 18%; left: 82%; animation: firefly-drift-b 14s 5s ease-in-out infinite; }
+.ambient-fireflies > span:nth-child(6) { top: 52%; left: 91%; animation: firefly-drift-c 17s 3s ease-in-out infinite; }
+.ambient-fireflies > span:nth-child(7) { top: 88%; left: 42%; animation: firefly-drift-b 19s 6s ease-in-out infinite; }
+.ambient-fireflies > span:nth-child(8) { top: 42%; left: 7%; animation: firefly-drift-a 16s 7s ease-in-out infinite; }
+
+@keyframes firefly-drift-a {
+  0%, 100% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.7); }
+  18%, 72% { opacity: 0.72; }
+  48% { opacity: 0.35; transform: translate3d(34px, -28px, 0) scale(1); }
+}
+
+@keyframes firefly-drift-b {
+  0%, 100% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.65); }
+  22%, 76% { opacity: 0.58; }
+  52% { opacity: 0.28; transform: translate3d(-26px, -38px, 0) scale(1.05); }
+}
+
+@keyframes firefly-drift-c {
+  0%, 100% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.75); }
+  20%, 70% { opacity: 0.64; }
+  46% { opacity: 0.32; transform: translate3d(22px, 32px, 0) scale(1); }
+}
+
+.route-swipe-in {
+  min-height: 100%;
+  animation: route-swipe-in 300ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes route-swipe-in {
+  from { opacity: 0.7; transform: translate3d(18px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
 .app-content {
   position: relative;
   z-index: 1;
@@ -1546,11 +1600,13 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 }
 
 .workspace-sidebar {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 20;
   display: flex;
   width: 248px;
   height: 100vh;
+  height: 100dvh;
   flex: 0 0 248px;
   flex-direction: column;
   padding: 26px 16px 18px;
@@ -1666,7 +1722,7 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 .workspace-sidebar-note small { margin-top: 4px; color: #898f84; font-size: 9px; }
 .workspace-version { padding-inline: 10px; color: #666e64; font-size: 8px; letter-spacing: 0.08em; }
 
-.workspace-main { min-width: 0; flex: 1; }
+.workspace-main { min-width: 0; flex: 1; margin-left: 248px; }
 
 .workspace-topbar {
   position: sticky;
@@ -1981,7 +2037,8 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 .workspace-mobile-nav { display: none; }
 
 @media (max-width: 1000px) {
-  .workspace-sidebar { width: 214px; flex-basis: 214px; }
+  .workspace-sidebar { width: 214px; }
+  .workspace-main { margin-left: 214px; }
   .workspace-content { padding-inline: 28px; }
   .workspace-grid { grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr); gap: 12px; }
   .workspace-plans-panel,
@@ -1990,6 +2047,7 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 
 @media (max-width: 760px) {
   .workspace-sidebar { display: none; }
+  .workspace-main { margin-left: 0; }
   .workspace-topbar { min-height: 61px; padding-inline: 20px; }
   .workspace-topbar-actions { gap: 5px; }
   .workspace-history-button { position: relative; width: 39px; justify-content: center; padding-inline: 0; }

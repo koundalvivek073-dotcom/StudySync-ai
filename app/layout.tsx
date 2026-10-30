@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import RouteMotion from './RouteMotion';
 import './globals.css';
 
 const inter = Inter({
@@ -33,8 +34,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <span className="ambient-glow ambient-glow-teal" />
           <span className="ambient-glow ambient-glow-sage" />
           <span className="ambient-grid" />
+          <span className="ambient-fireflies">
+            {Array.from({ length: 8 }, (_, index) => (
+              <span key={index} />
+            ))}
+          </span>
         </div>
-        <div className="app-content">{children}</div>
+        <div className="app-content">
+          <RouteMotion>{children}</RouteMotion>
+        </div>
       </body>
     </html>
   );
