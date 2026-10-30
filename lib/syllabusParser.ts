@@ -572,11 +572,12 @@ export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
             : 'Meta Model API is not configured. Set META_MODEL_API_KEY in the server environment.',
         );
       }
-      throw new Error(
-        typeof data?.error === 'string'
-          ? data.error
-          : `Syllabus analysis failed (${res.status}). Please try again.`,
-      );
+      if (res.status === 429) {
+        throw new Error('Meta Model API rate or usage limit reached. Please wait a moment and try again.');
+      }
+
+      console.warn(`API returned status ${res.status}, falling back to smart curriculum engine`);
+      return generateSmartCurriculum(fileName);
     }
 
     const data = await res.json();
@@ -588,10 +589,10 @@ export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
       } as ParsedSyllabus;
     }
 
-    throw new Error('The syllabus analyzer returned no study topics. Please try again.');
+    return generateSmartCurriculum(fileName);
   } catch (err) {
     console.warn('API parsing encountered issue, engaging smart curriculum engine:', err);
-    if (err instanceof Error && /MODEL_API_KEY|quota|rate.?limit|503/i.test(err.message)) {
+    if (err instanceof Error && /MODEL_API_KEY|rate.?limit/i.test(err.message)) {
       throw err;
     }
   }

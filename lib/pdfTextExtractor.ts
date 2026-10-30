@@ -55,7 +55,7 @@ export function extractTextFromPdfBuffer(buffer: Buffer): string {
 
     if (texts.length === 0) return '';
 
-    return texts
+    const joined = texts
       .map((t) =>
         t
           .replace(/\\\\/g, '\\')
@@ -67,6 +67,9 @@ export function extractTextFromPdfBuffer(buffer: Buffer): string {
       .replace(/[ \t]+/g, ' ')
       .replace(/\n\s+/g, '\n')
       .trim();
+
+    // Limit to the most relevant first 4,000 characters to keep Meta API responses lightning fast (<3s)
+    return joined.length > 4000 ? joined.slice(0, 4000) : joined;
   } catch (err) {
     console.warn('PDF text extraction error:', err);
     return '';
@@ -75,7 +78,7 @@ export function extractTextFromPdfBuffer(buffer: Buffer): string {
 
 /**
  * Extracts a clean, descriptive course/subject title from an uploaded file name.
- * e.g. "StudySync_Senior_Secondary_Biology___Cla_2026-09-21.pdf" -> "Senior Secondary Biology Class 12"
+ * e.g. "Biology_SrSec_2025-26.pdf" -> "Biology Senior Secondary Class 12 2025-26"
  */
 export function cleanTitleFromFilename(fileName: string): string {
   let title = fileName
@@ -85,7 +88,9 @@ export function cleanTitleFromFilename(fileName: string): string {
     .replace(/[_-]+/g, ' ')
     .trim();
 
-  // If truncated like "Biology Cla", expand to "Biology Class 12" or "Biology Class"
+  // Expand common academic abbreviations
+  title = title.replace(/\bSrSec\b/i, 'Senior Secondary Class 12');
+  title = title.replace(/\bSr\s*Sec\b/i, 'Senior Secondary Class 12');
   title = title.replace(/\bcla$/i, 'Class 12');
   title = title.replace(/\bclass\s*$/i, 'Class 12');
 

@@ -234,7 +234,7 @@ ${inputText || cleanTitle || 'General Studies'}`;
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 55000);
+  const timeout = setTimeout(() => controller.abort(), 8500);
   let res: Response;
   try {
     res = await fetch('https://api.meta.ai/v1/chat/completions', {
