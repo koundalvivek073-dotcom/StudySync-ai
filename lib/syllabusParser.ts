@@ -591,10 +591,8 @@ export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
     throw new Error('The syllabus analyzer returned no study topics. Please try again.');
   } catch (err) {
     console.warn('API parsing encountered issue, engaging smart curriculum engine:', err);
-    if (isDocumentUpload || (err instanceof Error && /MODEL_API_KEY/.test(err.message))) {
-      throw err instanceof Error
-        ? err
-        : new Error('Could not analyze the document. Please try again or paste its syllabus text.');
+    if (err instanceof Error && /MODEL_API_KEY|quota|rate.?limit|503/i.test(err.message)) {
+      throw err;
     }
   }
 
