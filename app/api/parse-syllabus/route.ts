@@ -73,7 +73,7 @@ STRICT PEDAGOGICAL & EXTRACTION RULES:
 }`;
 
 import { normalizeToParsedSyllabus } from '@/lib/syllabusParser';
-import { extractTextFromPdfBuffer, cleanTitleFromFilename } from '@/lib/pdfTextExtractor';
+import { cleanTitleFromFilename } from '@/lib/pdfTextExtractor';
 
 // ─── Meta Model API Parser ─────────────────────────────────────────────────────
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -114,32 +114,61 @@ function validateAndEnrichMetaSyllabus(raw: unknown, titleHint?: string): any {
   let chapterCount = 0;
   for (const subject of raw.subjects) {
     if (!isRecord(subject)) continue;
-    const chaptersArray = Array.isArray(subject.chapters) && subject.chapters.length > 0
+
+    // Support both 'chapters' and 'units' arrays returned by Meta Model API
+    let chaptersArray: Array<Record<string, unknown>> = [];
+    const candidateList = Array.isArray(subject.chapters)
       ? (subject.chapters as Array<Record<string, unknown>>)
-      : [
-          {
-            chapterName: typeof subject.subjectName === 'string' && subject.subjectName
-              ? `${subject.subjectName} Core Topics`
-              : 'Core Topics',
-            topics: [],
-          },
-        ];
+      : Array.isArray(subject.units)
+      ? (subject.units as Array<Record<string, unknown>>)
+      : [];
+
+    for (const item of candidateList) {
+      if (!isRecord(item)) continue;
+      // If a unit contains nested chapters, flatten them
+      if (Array.isArray(item.chapters) && item.chapters.length > 0) {
+        for (const subCh of item.chapters) {
+          if (isRecord(subCh)) {
+            chaptersArray.push({
+              ...subCh,
+              chapterName: subCh.chapterName || subCh.title || subCh.name || item.unitName || item.name || 'Chapter',
+              topics: Array.isArray(subCh.topics) ? subCh.topics : Array.isArray(subCh.subTopics) ? subCh.subTopics : [],
+            });
+          }
+        }
+      } else {
+        chaptersArray.push({
+          ...item,
+          chapterName: item.chapterName || item.unitName || item.title || item.name || 'Chapter',
+          topics: Array.isArray(item.topics) ? item.topics : Array.isArray(item.subTopics) ? item.subTopics : [],
+        });
+      }
+    }
+
+    if (chaptersArray.length === 0) {
+      chaptersArray = [
+        {
+          chapterName: typeof subject.subjectName === 'string' && subject.subjectName
+            ? `${subject.subjectName} Core Topics`
+            : 'Core Topics',
+          topics: [],
+        },
+      ];
+    }
     subject.chapters = chaptersArray;
 
     for (const chapter of chaptersArray) {
-      if (!isRecord(chapter)) continue;
       chapterCount++;
-
       const chapterName = typeof chapter.chapterName === 'string' && chapter.chapterName.trim()
         ? chapter.chapterName.trim()
         : 'Foundational Studies';
 
       const topics = Array.isArray(chapter.topics) ? (chapter.topics as Array<Record<string, unknown>>) : [];
       const validTopics = topics.filter(
-        (t) => isRecord(t) && typeof t.topicName === 'string' && t.topicName.trim().length > 0,
+        (t) => isRecord(t) && (typeof t.topicName === 'string' || typeof t.topic === 'string' || typeof t.name === 'string'),
       );
 
-      // If chapter has fewer than 2 topics, enrich it automatically so validation never fails
+      // If chapter has fewer than 2 topics, enrich it automatically
       if (validTopics.length < 2) {
         chapter.topics = [
           {
@@ -178,46 +207,37 @@ async function parseWithMeta(
   titleHint?: string,
 ): Promise<ParsedSyllabus> {
   const cleanTitle = cleanTitleFromFilename(payload.fileName || titleHint || 'Syllabus');
-  const inputText = payload.text || cleanTitle || '';
-  const isBareChapterInput = !payload.base64Data && (
-    inputText.length < 500 ||
-    /class\s*\d|grade\s*\d|chapter|unit|cbse|jee|neet|upsc|semester|\bsem\b/i.test(inputText)
-  ) && !inputText.includes('\n\n');
+  const isBareChapterInput = !payload.base64Data && payload.text && (
+    payload.text.length < 500 ||
+    /class\s*\d|grade\s*\d|chapter|unit|cbse|jee|neet|upsc|semester|\bsem\b/i.test(payload.text)
+  ) && !payload.text.includes('\n\n');
 
-  const documentInstructions = `Analyze the attached syllabus document page by page. The document itself is the source of truth for the subject, grade/course, and chapter list. Read chapter headings and any listed subheadings from the pages; do not treat the filename or a subject name as a chapter or topic.
+  const documentInstructions = `Analyze the attached syllabus PDF document in detail. The attached document is the source of truth for the curriculum.
+For EVERY unit or chapter in the document:
+- Preserve the exact chapter / unit title as taught.
+- Break down each chapter into 4 to 8 granular, study-sized subtopics with real academic concepts.
+- Classify each topic as easy, medium, or hard with realistic study hours (1.0h to 3.0h).
+- Do not repeat the chapter title as a topic.
 
-For EVERY chapter in the document:
-- Preserve its actual chapter title and create 4-8 specific, study-sized subtopics taught within that chapter. If the document lists only chapter headings, use your academic knowledge of the identified course, grade, and curriculum to expand each chapter accurately.
-- Name concrete concepts, processes, laws, structures, methods, or problem types. Do not output generic labels like "Overview" or repeat the chapter title as a topic.
-- Classify each subtopic independently as easy, medium, or hard based on the knowledge and problem-solving it requires. Estimate focused study time per subtopic: easy 0.5-1.5 hours, medium 1.5-2.5 hours, hard 2-4 hours.
-- Include meaningful prerequisites when one topic depends on another; otherwise use an empty array.
+Document name: ${payload.fileName || cleanTitle}`;
 
-Document title hint: ${cleanTitle}`;
+  const textInstructions = `Parse the syllabus into its subject > chapter > topic hierarchy with 4-8 specific study topics per chapter, difficulty (easy/medium/hard), and realistic study hours.`;
+  const chapterListPrompt = `${textInstructions}\n\nCourse and chapter list:\n${payload.text || cleanTitle}`;
 
-  const textInstructions = `Parse the syllabus into its actual subject > chapter > topic hierarchy. For EVERY chapter, produce 4-8 specific, study-sized subtopics. If the input contains only chapter headings, expand each using academic knowledge appropriate to the stated course and grade. Do not use a subject name, generic label, or chapter title as a topic. Classify every topic independently as easy, medium, or hard and estimate focused study time (easy 0.5-1.5h, medium 1.5-2.5h, hard 2-4h). Include meaningful prerequisites or an empty array.`;
-  const chapterListPrompt = `${textInstructions}
-
-Course and chapter list:
-${inputText || cleanTitle || 'General Studies'}`;
-
-  // If we have clean text extracted from the PDF or entered by the user, prioritize text instruction
-  const userPromptText = payload.text && payload.text.trim().length > 40
-    ? `${textInstructions}\n\nDocument Content:\n${payload.text}`
-    : payload.base64Data
-      ? documentInstructions
-      : isBareChapterInput
-        ? chapterListPrompt
-        : `${textInstructions}\n\nDocument Content:\n${payload.text || cleanTitle}`;
+  const userPromptText = payload.base64Data
+    ? documentInstructions
+    : isBareChapterInput
+      ? chapterListPrompt
+      : `${textInstructions}\n\nDocument Content:\n${payload.text || cleanTitle}`;
 
   const userContent: Array<Record<string, unknown>> = [
     { type: 'text', text: userPromptText },
   ];
 
-  // Only pass large base64 file data if we did NOT extract sufficient text
-  const hasExtractedText = Boolean(payload.text && payload.text.trim().length > 60);
-  if (payload.base64Data && payload.mimeType && !hasExtractedText) {
+  // ALWAYS pass the PDF file directly to Meta Model API when base64Data is present
+  if (payload.base64Data && payload.mimeType) {
     const dataUrl = `data:${payload.mimeType};base64,${payload.base64Data}`;
-    if (payload.mimeType === 'application/pdf') {
+    if (payload.mimeType === 'application/pdf' || (payload.fileName && payload.fileName.endsWith('.pdf'))) {
       userContent.push({
         type: 'file',
         file: {
@@ -234,7 +254,7 @@ ${inputText || cleanTitle || 'General Studies'}`;
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8500);
+  const timeout = setTimeout(() => controller.abort(), 45000);
   let res: Response;
   try {
     res = await fetch('https://api.meta.ai/v1/chat/completions', {
@@ -436,21 +456,15 @@ export async function POST(req: NextRequest) {
         const text = await file.text();
         payload = { text, title, fileName: file.name };
       } else {
-        // PDF or Image
+        // PDF or Image — sent directly to Meta Model AI
         const buffer = await file.arrayBuffer();
         const nodeBuffer = Buffer.from(buffer);
         const base64Data = nodeBuffer.toString('base64');
-        let extractedText = '';
-
-        if (mimeType === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
-          extractedText = extractTextFromPdfBuffer(nodeBuffer);
-        }
 
         payload = {
           mimeType,
           base64Data,
           fileName: file.name,
-          text: extractedText,
           title,
         };
       }
@@ -465,7 +479,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Try Meta Model API (Attempt 1: Document/Extracted content)
+    // 1. Try Meta Model API (Attempt 1: Send PDF Document directly to AI)
     let metaFailure = '';
     if (metaKey) {
       try {
@@ -514,8 +528,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. If text is available from file or extraction, use our Smart Structural Parser!
-    if (payload.text && payload.text.trim().length > 30) {
+    // 3. If text was explicitly provided (pasted notes or text file, NOT a PDF), parse locally
+    if (payload.text && !payload.base64Data && payload.text.trim().length > 30) {
       const result = parseTextLocally(payload.text, payload.title);
       if (result && result.items && result.items.length > 0) {
         return NextResponse.json(result);

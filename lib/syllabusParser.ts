@@ -53,9 +53,33 @@ export function normalizeToParsedSyllabus(raw: any, titleHint?: string, source =
       const color = getColor(subjectName);
       const chapters: ChapterItem[] = [];
 
-      const rawChapters = Array.isArray(subjRaw.chapters) ? subjRaw.chapters : [];
+      const candidateChapters = Array.isArray(subjRaw.chapters)
+        ? subjRaw.chapters
+        : Array.isArray(subjRaw.units)
+        ? subjRaw.units
+        : [];
+
+      const rawChapters: any[] = [];
+      candidateChapters.forEach((cItem: any) => {
+        if (Array.isArray(cItem.chapters) && cItem.chapters.length > 0) {
+          cItem.chapters.forEach((subCh: any) => {
+            rawChapters.push({
+              ...subCh,
+              chapterName: subCh.chapterName || subCh.title || subCh.name || `${cItem.unitName || 'Unit'}: ${subCh.chapter || 'Chapter'}`,
+              topics: subCh.topics || subCh.subTopics || [],
+            });
+          });
+        } else {
+          rawChapters.push({
+            ...cItem,
+            chapterName: cItem.chapterName || cItem.unitName || cItem.title || cItem.name || 'Chapter',
+            topics: cItem.topics || cItem.subTopics || [],
+          });
+        }
+      });
+
       rawChapters.forEach((chapRaw: any, cIdxInner: number) => {
-        const chapterName = (chapRaw.chapterName || chapRaw.chapter || `Chapter ${cIdxInner + 1}`).trim();
+        const chapterName = (chapRaw.chapterName || chapRaw.chapter || chapRaw.unitName || chapRaw.title || `Chapter ${cIdxInner + 1}`).trim();
         const topics: GranularTopic[] = [];
 
         const rawTopics = Array.isArray(chapRaw.topics)
@@ -65,7 +89,9 @@ export function normalizeToParsedSyllabus(raw: any, titleHint?: string, source =
           : [];
 
         rawTopics.forEach((topRaw: any, tIdx: number) => {
-          const rawName = typeof topRaw === 'string' ? topRaw : topRaw.topicName || topRaw.name || `Topic ${tIdx + 1}`;
+          const rawName = typeof topRaw === 'string'
+            ? topRaw
+            : topRaw.topicName || topRaw.topic || topRaw.name || topRaw.title || `Topic ${tIdx + 1}`;
           const topicName = rawName.replace(/^[-*•\s]+/, '').replace(/https?:\/\/\S+/gi, '').trim();
           if (!topicName || topicName.length < 2) return;
 
