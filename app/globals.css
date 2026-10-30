@@ -435,6 +435,146 @@ select.input option {
 .step-line.done { background: linear-gradient(90deg, #6366f1, #8b5cf6); }
 
 /* ─── Schedule Blocks ──────────────────────────────────────────────────────── */
+.planner-canvas {
+  position: relative;
+  padding: 14px;
+  color: #27334a;
+  border: 1px solid #f0dce8;
+  border-radius: 18px;
+  background-color: #fffaf6;
+  background-image:
+    linear-gradient(90deg, #f5cadd 0 34%, #cfe2fa 34% 67%, #d9eddf 67% 100%),
+    repeating-linear-gradient(0deg, transparent 0 31px, rgba(91, 112, 145, 0.045) 31px 32px);
+  background-size: 100% 5px, 100% 100%;
+  background-repeat: no-repeat, repeat;
+  box-shadow: 0 16px 40px rgba(8, 12, 24, 0.18), 0 2px 8px rgba(20, 32, 54, 0.08);
+}
+
+.planner-canvas .time-label {
+  color: #718097;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.planner-grid-line {
+  border-color: rgba(69, 84, 111, 0.12);
+}
+
+.planner-event {
+  appearance: none;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font: inherit;
+  line-height: 1.25;
+  text-align: left;
+  overflow: hidden;
+  white-space: normal;
+  cursor: pointer;
+  transition: filter var(--transition), box-shadow var(--transition), opacity var(--transition);
+}
+
+.planner-event:hover:not(:disabled) {
+  filter: saturate(1.12);
+  box-shadow: 0 3px 8px rgba(36, 48, 73, 0.12);
+}
+
+.planner-event:focus-visible,
+.planner-month-event:focus-visible {
+  outline: 2px solid #536fd0;
+  outline-offset: 2px;
+}
+
+.planner-event:disabled {
+  cursor: default;
+}
+
+.planner-event-title {
+  line-height: 1.2;
+}
+
+.planner-event-time {
+  color: #59677e;
+  line-height: 1.2;
+}
+
+.planner-week-header {
+  background: rgba(255, 250, 246, 0.96);
+}
+
+.planner-day-heading {
+  border-color: #e7e5e8;
+  color: #58667c;
+}
+
+.planner-day-heading.is-today {
+  background: #f7eaf1;
+  color: #9c4c76;
+}
+
+.planner-day-number.is-today,
+.planner-month-number.is-today {
+  background: #dce8fb;
+  color: #365b9d;
+}
+
+.planner-day-column {
+  border-color: #e8e8ec;
+}
+
+.planner-day-column.is-today {
+  background: rgba(222, 234, 252, 0.28);
+}
+
+.planner-now-indicator {
+  background: #dd6688;
+}
+
+.planner-now-dot {
+  background: #dd6688;
+  box-shadow: 0 0 0 3px rgba(221, 102, 136, 0.16);
+}
+
+.planner-month-weekdays {
+  color: #718097;
+  font-weight: 700;
+}
+
+.planner-month-day {
+  border: 1px solid #e8e4e6;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.84);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.planner-month-day:hover {
+  border-color: #c9d8f1;
+  box-shadow: 0 3px 10px rgba(61, 91, 145, 0.08);
+}
+
+.planner-month-day.is-today {
+  border-color: #a7bee9;
+  background: #f1f6ff;
+}
+
+.planner-month-number {
+  color: #66748a;
+}
+
+.planner-month-event {
+  appearance: none;
+  width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 5px;
+  font: inherit;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.planner-month-event:hover {
+  filter: saturate(1.12);
+}
+
 .schedule-block {
   border-radius: 4px;
   padding: 2px 6px;
@@ -658,6 +798,15 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   .ambient-glow { opacity: 0.18; }
   .ambient-glow-teal { opacity: 0.12; }
   .ambient-grid { background-size: 52px 52px; }
+
+  .planner-canvas {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .planner-canvas .time-label {
+    font-size: 0.58rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

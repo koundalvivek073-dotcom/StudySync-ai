@@ -34,25 +34,14 @@ type ViewMode = 'day' | 'week' | 'month';
 // ─── Block Colors by type ─────────────────────────────────────────────────────
 
 const TYPE_COLORS: Record<string, string> = {
-  sleep: '#1e3a5f',
-  meal: '#064e3b',
-  hygiene: '#3b0764',
-  commitment: '#450a0a',
-  buffer: '#1f2937',
-  break: '#1c1c2e',
-  study: '#1e40af',
+  sleep: '#6688bd',
+  meal: '#378a6b',
+  hygiene: '#8b66ae',
+  commitment: '#bd6872',
+  buffer: '#778198',
+  break: '#c0873e',
+  study: '#586dcc',
   free: 'transparent',
-};
-
-const TYPE_TEXT: Record<string, string> = {
-  sleep: '#60a5fa',
-  meal: '#4ade80',
-  hygiene: '#c084fc',
-  commitment: '#f87171',
-  buffer: '#9ca3af',
-  break: '#6b7280',
-  study: '#e0e7ff',
-  free: '#374151',
 };
 
 // ─── Status helpers ───────────────────────────────────────────────────────────
@@ -75,6 +64,18 @@ const toMin = (t: string) => {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
 };
+
+function getCalendarBlockColors(block: ScheduleBlock) {
+  const accent = block.type === 'study'
+    ? block.color
+    : TYPE_COLORS[block.type] ?? TYPE_COLORS.buffer;
+
+  return {
+    accent,
+    background: `color-mix(in srgb, ${accent} 16%, #ffffff)`,
+    border: `color-mix(in srgb, ${accent} 48%, #ffffff)`,
+  };
+}
 
 // ─── Block Status Modal ───────────────────────────────────────────────────────
 
@@ -229,13 +230,13 @@ function DayView({
   const HOUR_HEIGHT = isMobile ? 48 : 60;
 
   return (
-    <div className="relative flex gap-0">
+    <div className="planner-day relative flex gap-0">
       {/* Time labels */}
       <div className="w-10 sm:w-14 flex-shrink-0">
         {Array.from({ length: 24 }, (_, h) => (
           <div
             key={h}
-            className="time-label flex items-start justify-end pr-1 sm:pr-2"
+            className="time-label planner-time-label flex items-start justify-end pr-1 sm:pr-2"
             style={{ height: HOUR_HEIGHT }}
           >
             {h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`}
@@ -244,11 +245,11 @@ function DayView({
       </div>
 
       {/* Grid */}
-      <div className="flex-1 relative" style={{ height: 24 * HOUR_HEIGHT }}>
+      <div className="planner-day-grid flex-1 relative" style={{ height: 24 * HOUR_HEIGHT }}>
         {Array.from({ length: 24 }, (_, h) => (
           <div
             key={h}
-            className="absolute w-full border-t border-[rgba(255,255,255,0.04)]"
+            className="planner-grid-line absolute w-full border-t"
             style={{ top: h * HOUR_HEIGHT }}
           />
         ))}
@@ -258,18 +259,21 @@ function DayView({
           const endMin = toMin(block.endTime);
           const top = (startMin / 60) * HOUR_HEIGHT;
           const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 18);
-          const bg = block.type === 'study' ? block.color : TYPE_COLORS[block.type] ?? '#1f2937';
-          const textColor = block.type === 'study' ? '#fff' : TYPE_TEXT[block.type] ?? '#aaa';
+          const colors = getCalendarBlockColors(block);
           const ringStyle = block.type === 'study' && block.status
             ? STATUS_RING[block.status] : undefined;
 
           return (
-            <div
+            <button
+              type="button"
               key={block.id}
-              className="absolute left-0 right-0 mx-1 rounded schedule-block group cursor-pointer relative"
+              disabled={block.type !== 'study'}
+              aria-label={`${block.label}, ${block.startTime} to ${block.endTime}, ${block.status ?? 'upcoming'}`}
+              className="planner-event absolute left-0 right-0 mx-1 rounded schedule-block group relative"
               style={{
-                top, height, background: bg, color: textColor,
-                border: `1px solid ${bg}88`,
+                top, height, background: colors.background, color: '#27334a',
+                border: `1px solid ${colors.border}`,
+                borderLeft: `3px solid ${colors.accent}`,
                 boxShadow: ringStyle,
                 opacity: block.status === 'completed' ? 0.55 : 1,
                 transition: 'opacity 0.2s, box-shadow 0.2s',
@@ -277,19 +281,19 @@ function DayView({
               onClick={() => block.type === 'study' && onBlockClick(block)}
             >
               <StatusRing status={block.status} />
-              <span className="block truncate px-1 py-0.5 text-[10px] font-semibold pr-4">{block.label}</span>
-              <span className="block truncate px-1 text-[9px] opacity-70">{block.startTime} – {block.endTime}</span>
-            </div>
+              <span className="planner-event-title block truncate px-1 py-0.5 text-[10px] font-semibold pr-4">{block.label}</span>
+              <span className="planner-event-time block truncate px-1 text-[9px] opacity-75">{block.startTime} – {block.endTime}</span>
+            </button>
           );
         })}
 
         {/* Now indicator */}
         {format(date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd') && (
           <div
-            className="absolute w-full h-0.5 bg-red-500 z-10 flex items-center"
+            className="planner-now-indicator absolute w-full h-0.5 z-10 flex items-center"
             style={{ top: ((new Date().getHours() * 60 + new Date().getMinutes()) / 60) * HOUR_HEIGHT }}
           >
-            <div className="w-2 h-2 rounded-full bg-red-500 -ml-1" />
+            <div className="planner-now-dot w-2 h-2 rounded-full -ml-1" />
           </div>
         )}
       </div>
@@ -311,17 +315,17 @@ function WeekView({
   const HOUR_HEIGHT = isMobile ? 36 : 48;
 
   return (
-    <div className="overflow-x-auto">
+    <div className="planner-week-scroll overflow-x-auto">
       {/* Header */}
-      <div className="flex" style={{ minWidth: isMobile ? 500 : undefined }}>
+      <div className="planner-week-header flex" style={{ minWidth: isMobile ? 500 : undefined }}>
         <div className="w-10 sm:w-12 flex-shrink-0" />
         {days.map((d) => (
-          <div key={d.toISOString()} className="flex-1 text-center py-2 text-xs font-semibold border-b border-[rgba(255,255,255,0.06)]">
-            <div className={`${isSameDay(d, new Date()) ? 'text-primary-400' : 'text-[#888baa]'}`}>
+          <div key={d.toISOString()} className={`planner-day-heading flex-1 text-center py-2 text-xs font-semibold border-b ${isSameDay(d, new Date()) ? 'is-today' : ''}`}>
+            <div className="planner-day-name">
               {format(d, isMobile ? 'EEEEE' : 'EEE')}
             </div>
-            <div className={`text-sm font-bold mt-0.5 w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center mx-auto ${
-              isSameDay(d, new Date()) ? 'bg-primary-500 text-white' : ''
+            <div className={`planner-day-number text-sm font-bold mt-0.5 w-7 h-7 rounded-full flex items-center justify-center mx-auto ${
+              isSameDay(d, new Date()) ? 'is-today' : ''
             }`}>
               {format(d, 'd')}
             </div>
@@ -330,11 +334,11 @@ function WeekView({
       </div>
 
       {/* Grid */}
-      <div className="relative flex" style={{ height: 24 * HOUR_HEIGHT, minWidth: isMobile ? 500 : undefined }}>
+      <div className="planner-week-grid relative flex" style={{ height: 24 * HOUR_HEIGHT, minWidth: isMobile ? 500 : undefined }}>
         {/* Time labels */}
         <div className="w-10 sm:w-12 flex-shrink-0">
           {Array.from({ length: 24 }, (_, h) => (
-            <div key={h} className="time-label flex items-start justify-end pr-1 sm:pr-2" style={{ height: HOUR_HEIGHT }}>
+            <div key={h} className="time-label planner-time-label flex items-start justify-end pr-1 sm:pr-2" style={{ height: HOUR_HEIGHT }}>
               {h % 3 === 0 ? (h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`) : ''}
             </div>
           ))}
@@ -346,9 +350,9 @@ function WeekView({
           const dayBlocks = blocks.filter((b) => b.date === dateStr);
 
           return (
-            <div key={dateStr} className="flex-1 relative border-l border-[rgba(255,255,255,0.04)]">
+            <div key={dateStr} className={`planner-day-column flex-1 relative border-l ${isSameDay(day, new Date()) ? 'is-today' : ''}`}>
               {Array.from({ length: 24 }, (_, h) => (
-                <div key={h} className="absolute w-full border-t border-[rgba(255,255,255,0.04)]" style={{ top: h * HOUR_HEIGHT, height: HOUR_HEIGHT }} />
+                <div key={h} className="planner-grid-line absolute w-full border-t" style={{ top: h * HOUR_HEIGHT, height: HOUR_HEIGHT }} />
               ))}
 
               {dayBlocks.map((block) => {
@@ -356,18 +360,23 @@ function WeekView({
                 const endMin = toMin(block.endTime);
                 const top = (startMin / 60) * HOUR_HEIGHT;
                 const height = Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT, 14);
-                const bg = block.type === 'study' ? block.color : TYPE_COLORS[block.type] ?? '#1f2937';
+                const colors = getCalendarBlockColors(block);
                 const ringStyle = block.type === 'study' && block.status
                   ? STATUS_RING[block.status] : undefined;
 
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={block.id}
-                    className="absolute inset-x-0.5 rounded schedule-block group cursor-pointer relative"
+                    disabled={block.type !== 'study'}
+                    aria-label={`${block.label}, ${block.startTime} to ${block.endTime}, ${block.status ?? 'upcoming'}`}
+                    className="planner-event absolute inset-x-0.5 rounded schedule-block group relative"
                     style={{
                       top, height,
-                      background: `${bg}dd`,
-                      borderLeft: `2px solid ${bg}`,
+                      background: colors.background,
+                      color: '#27334a',
+                      border: `1px solid ${colors.border}`,
+                      borderLeft: `3px solid ${colors.accent}`,
                       boxShadow: ringStyle,
                       opacity: block.status === 'completed' ? 0.5 : 1,
                       transition: 'opacity 0.2s, box-shadow 0.2s',
@@ -375,10 +384,15 @@ function WeekView({
                     onClick={() => block.type === 'study' && onBlockClick(block)}
                   >
                     <StatusRing status={block.status} />
-                    <span className="block truncate px-0.5 sm:px-1 text-[8px] sm:text-[9px] font-semibold text-white/90 pt-0.5 pr-3">
+                    <span className="planner-event-title block truncate px-0.5 sm:px-1 text-[8px] sm:text-[9px] font-semibold pt-0.5 pr-3">
                       {block.label.slice(0, isMobile ? 8 : 16)}
                     </span>
-                  </div>
+                    {height >= 36 && (
+                      <span className="planner-event-time block truncate px-0.5 sm:px-1 text-[8px]">
+                        {block.startTime}
+                      </span>
+                    )}
+                  </button>
                 );
               })}
             </div>
@@ -408,12 +422,12 @@ function MonthView({
 
   return (
     <div>
-      <div className="grid grid-cols-7 text-center text-[10px] sm:text-xs text-[#888baa] mb-2">
+      <div className="planner-month-weekdays grid grid-cols-7 text-center text-[10px] sm:text-xs mb-2">
         {(isMobile ? ['M', 'T', 'W', 'T', 'F', 'S', 'S'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']).map((d, i) => (
           <div key={i} className="py-1">{d}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
+      <div className="planner-month-grid grid grid-cols-7 gap-1 sm:gap-2">
         {cells.map((day, idx) => {
           if (!day) return <div key={`e${idx}`} className="h-14 sm:h-20" />;
           const dateStr = format(day, 'yyyy-MM-dd');
@@ -425,30 +439,32 @@ function MonthView({
           return (
             <div
               key={dateStr}
-              className={`h-14 sm:h-20 card p-0.5 sm:p-1 overflow-hidden ${isToday ? 'border-primary-500' : ''}`}
+              className={`planner-month-day h-14 sm:h-20 p-0.5 sm:p-1 overflow-hidden ${isToday ? 'is-today' : ''}`}
             >
-              <div className={`text-[10px] font-bold mb-0.5 w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center ${
-                isToday ? 'bg-primary-500 text-white' : 'text-[#888baa]'
+              <div className={`planner-month-number text-[10px] font-bold mb-0.5 w-5 h-5 rounded-full flex items-center justify-center ${
+                isToday ? 'is-today' : ''
               }`}>
                 {format(day, 'd')}
               </div>
               <div className="space-y-0.5">
                 {dayBlocks.slice(0, isMobile ? 2 : 3).map((block) => (
-                  <div
+                  <button
+                    type="button"
                     key={block.id}
-                    className="text-[7px] sm:text-[8px] rounded px-0.5 sm:px-1 truncate font-semibold flex items-center gap-0.5 cursor-pointer hover:opacity-80"
+                    className="planner-month-event text-[7px] sm:text-[8px] rounded px-0.5 sm:px-1 truncate font-semibold flex items-center gap-0.5 cursor-pointer hover:opacity-80"
                     style={{
-                      background: `${block.color}33`,
-                      color: block.color,
+                      background: getCalendarBlockColors(block).background,
+                      color: '#27334a',
                       borderLeft: `2px solid ${block.status === 'completed' ? '#22c55e' : block.status === 'pending' ? '#f59e0b' : block.color}`,
                       opacity: block.status === 'completed' ? 0.6 : 1,
                     }}
+                    aria-label={`${block.label}, ${block.startTime} to ${block.endTime}, ${block.status ?? 'upcoming'}`}
                     onClick={() => onBlockClick(block)}
                   >
-                    {block.status === 'completed' && '✅ '}
-                    {block.status === 'pending' && '⏳ '}
+                    {block.status === 'completed' && <CheckCircle2 size={8} aria-hidden="true" />}
+                    {block.status === 'pending' && <Clock size={8} aria-hidden="true" />}
                     {block.label.replace('📚 ', '').slice(0, isMobile ? 6 : 12)}
-                  </div>
+                  </button>
                 ))}
                 {dayBlocks.length > (isMobile ? 2 : 3) && (
                   <div className="text-[7px] text-[#666]">+{dayBlocks.length - (isMobile ? 2 : 3)}</div>
@@ -456,9 +472,17 @@ function MonthView({
               </div>
               {/* Mini status counts */}
               {(completedCount > 0 || pendingCount > 0) && (
-                <div className="flex gap-0.5 mt-0.5">
-                  {completedCount > 0 && <span className="text-[6px] sm:text-[7px] text-green-500">✅{completedCount}</span>}
-                  {pendingCount > 0 && <span className="text-[6px] sm:text-[7px] text-amber-500">⏳{pendingCount}</span>}
+                <div className="planner-month-status flex gap-1 mt-1">
+                  {completedCount > 0 && (
+                    <span className="flex items-center gap-0.5 text-[7px] text-emerald-700" aria-label={`${completedCount} completed`}>
+                      <CheckCircle2 size={8} aria-hidden="true" />{completedCount}
+                    </span>
+                  )}
+                  {pendingCount > 0 && (
+                    <span className="flex items-center gap-0.5 text-[7px] text-amber-700" aria-label={`${pendingCount} pending`}>
+                      <Clock size={8} aria-hidden="true" />{pendingCount}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -967,7 +991,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Calendar body */}
-          <div id="schedule-capture" ref={dashboardRef} className="flex-1 overflow-auto px-2 sm:px-4 py-2">
+          <div id="schedule-capture" ref={dashboardRef} className="planner-canvas flex-1 overflow-auto">
             {view === 'day' && (
               <DayView date={currentDate} blocks={schedule} syllabus={syllabus} onBlockClick={setSelectedBlock} isMobile={isMobile} />
             )}
