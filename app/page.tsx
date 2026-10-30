@@ -1,262 +1,525 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import {
+  BookOpen,
+  Brain,
+  CalendarDays,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  FileText,
+  History,
+  LayoutDashboard,
+  Pause,
+  Plus,
+  RotateCcw,
+  Sparkles,
+  Play,
+  Upload,
+} from 'lucide-react';
+import { addDays, format, isValid, startOfWeek } from 'date-fns';
 import { useAppStore } from '@/store/appStore';
-import { Brain, Calendar, FileText, Heart, Sparkles, ChevronRight, Clock, Shield, Zap, Upload, History } from 'lucide-react';
 import SavedTimetablesModal from '@/components/SavedTimetablesModal';
 import InAppPdfModal from '@/components/InAppPdfModal';
-import { getStoredTimetablesList, getStoredTimetable } from '@/lib/localTimetableStorage';
+import {
+  getStoredTimetablesList,
+  getStoredTimetable,
+  StoredTimetable,
+  StoredTimetableMeta,
+} from '@/lib/localTimetableStorage';
 
-const features = [
-  {
-    icon: Upload,
-    title: 'Smart Syllabus Parsing',
-    desc: 'Upload PDF or images. Our AI extracts subjects, chapters, complexity, and estimated hours instantly.',
-    color: '#6366f1',
-  },
-  {
-    icon: Heart,
-    title: 'Health-First Scheduling',
-    desc: 'Sleep, meals, hygiene, and breaks are sacred. Your timetable respects your body first.',
-    color: '#ec4899',
-  },
-  {
-    icon: Brain,
-    title: 'Peak-Energy Alignment',
-    desc: 'Hard topics land in your peak focus hours. We match complexity to your energy profile.',
-    color: '#8b5cf6',
-  },
-  {
-    icon: Calendar,
-    title: 'Visual Dashboard',
-    desc: 'Color-coded daily, weekly, and monthly calendar views with subject legend.',
-    color: '#22c55e',
-  },
-  {
-    icon: FileText,
-    title: 'PDF Export',
-    desc: 'Download a beautifully styled, print-ready PDF timetable with full schedule breakdown.',
-    color: '#f59e0b',
-  },
-  {
-    icon: Shield,
-    title: 'Smart Guardrails',
-    desc: 'Warns you if your horizon is too short. Auto-inserts hydration breaks every session.',
-    color: '#06b6d4',
-  },
-];
-
-const steps = [
-  { n: '01', title: 'Upload Syllabus', desc: 'PDF, PNG, JPG — any format works.' },
-  { n: '02', title: 'Answer 5 Questions', desc: 'Tell us your lifestyle, sleep, and energy.' },
-  { n: '03', title: 'Get Your Timetable', desc: 'Personalized, health-safe, exportable.' },
-];
+function formatPlanDate(value: string) {
+  const date = new Date(value);
+  return isValid(date) ? format(date, 'MMM d, yyyy') : 'Date unavailable';
+}
 
 export default function HomePage() {
   const router = useRouter();
   const { setSyllabus, setProfile, setSchedule } = useAppStore();
   const [savedModalOpen, setSavedModalOpen] = useState(false);
-  const [savedCount, setSavedCount] = useState(0);
+  const [savedPlans, setSavedPlans] = useState<StoredTimetableMeta[]>([]);
+  const [activePlan, setActivePlan] = useState<StoredTimetable | null>(null);
+  const [dashboardDate, setDashboardDate] = useState<Date | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const [plansError, setPlansError] = useState<string | null>(null);
   const [pdfModalOpen, setPdfModalOpen] = useState(false);
   const [pdfDataUri, setPdfDataUri] = useState<string | null>(null);
   const [pdfTitle, setPdfTitle] = useState('Personalized Timetable');
+  const [focusSeconds, setFocusSeconds] = useState(25 * 60);
+  const [timerRunning, setTimerRunning] = useState(false);
+  const focusSecondsRef = useRef(25 * 60);
+  const greeting = 'Welcome back';
+
+  const refreshSavedPlans = useCallback(() => {
+    void getStoredTimetablesList()
+      .then((plans) => Promise.resolve(plans.length > 0 ? getStoredTimetable(plans[0].id) : null)
+        .then((latestPlan) => {
+          const today = new Date();
+          setPlansError(null);
+          setSavedPlans(plans);
+          setActivePlan(latestPlan);
+          setDashboardDate(today);
+          setSelectedDay((current) => current ?? format(today, 'yyyy-MM-dd'));
+        }))
+      .catch((error: unknown) => {
+        console.error('[Home] Failed to load saved study plans:', error);
+        setPlansError('Your saved plans could not be loaded. Please refresh and try again.');
+      })
+      .finally(() => setPlansLoading(false));
+  }, []);
 
   useEffect(() => {
-    const checkSaved = async () => {
-      const list = await getStoredTimetablesList();
-      setSavedCount(list.length);
-    };
-    checkSaved();
-    window.addEventListener('studysync_timetables_changed', checkSaved);
-    return () => window.removeEventListener('studysync_timetables_changed', checkSaved);
-  }, []);
+    void refreshSavedPlans();
+    window.addEventListener('studysync_timetables_changed', refreshSavedPlans);
+    return () => window.removeEventListener('studysync_timetables_changed', refreshSavedPlans);
+  }, [refreshSavedPlans]);
+
+  useEffect(() => {
+    if (!timerRunning) return;
+
+    const interval = window.setInterval(() => {
+      const next = Math.max(0, focusSecondsRef.current - 1);
+      focusSecondsRef.current = next;
+      setFocusSeconds(next);
+      if (next === 0) setTimerRunning(false);
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [timerRunning]);
 
   const handleSelectTimetable = async (id: string) => {
     const item = await getStoredTimetable(id);
-    if (item) {
-      setSyllabus(item.syllabus);
-      setProfile(item.profile);
-      setSchedule(item.blocks, null);
-      router.push('/dashboard');
+    if (!item) {
+      setPlansError('That saved plan is no longer available on this device.');
+      return;
     }
+
+    setSyllabus(item.syllabus);
+    setProfile(item.profile);
+    setSchedule(item.blocks, null);
+    router.push('/dashboard');
+  };
+
+  const totalSessions = savedPlans.reduce((total, plan) => total + plan.studyBlocksCount, 0);
+  const completedSessions = savedPlans.reduce((total, plan) => total + plan.completedBlocksCount, 0);
+  const todayKey = dashboardDate ? format(dashboardDate, 'yyyy-MM-dd') : '';
+  const currentWeekStart = dashboardDate ? startOfWeek(dashboardDate, { weekStartsOn: 1 }) : null;
+  const weekDays = currentWeekStart
+    ? Array.from({ length: 7 }, (_, index) => {
+        const date = addDays(currentWeekStart, index);
+        const dateKey = format(date, 'yyyy-MM-dd');
+        const count = activePlan?.blocks.filter((block) => block.type === 'study' && block.date === dateKey).length ?? 0;
+        return { date, dateKey, count };
+      })
+    : [];
+  const selectedDayKey = selectedDay ?? todayKey;
+  const dayBlocks = activePlan?.blocks
+    .filter((block) => block.type === 'study' && block.date === selectedDayKey)
+    .sort((first, second) => first.startTime.localeCompare(second.startTime)) ?? [];
+  const selectedDayDate = weekDays.find((day) => day.dateKey === selectedDayKey)?.date;
+
+  const subjectNamesById = new Map(
+    (activePlan?.syllabus.items ?? []).map((item) => [item.id, item.subject]),
+  );
+  const subjectColors = new Map(
+    (activePlan?.syllabus.items ?? []).map((item) => [item.subject, item.color]),
+  );
+  const subjectStats = new Map<string, { sessions: number; completed: number }>();
+  for (const item of activePlan?.syllabus.items ?? []) {
+    if (!subjectStats.has(item.subject)) subjectStats.set(item.subject, { sessions: 0, completed: 0 });
+  }
+  for (const block of activePlan?.blocks ?? []) {
+    if (block.type !== 'study') continue;
+    const subject = block.subjectName ?? subjectNamesById.get(block.syllabusItemId ?? '') ?? 'Other';
+    const stats = subjectStats.get(subject) ?? { sessions: 0, completed: 0 };
+    stats.sessions += 1;
+    if (block.status === 'completed') stats.completed += 1;
+    subjectStats.set(subject, stats);
+  }
+  const subjects = Array.from(subjectStats, ([name, stats]) => ({
+    name,
+    ...stats,
+    color: subjectColors.get(name) || '#c5ee83',
+  }))
+    .sort((first, second) => second.sessions - first.sessions || first.name.localeCompare(second.name))
+    .slice(0, 5);
+  const focusTimeLabel = `${String(Math.floor(focusSeconds / 60)).padStart(2, '0')}:${String(focusSeconds % 60).padStart(2, '0')}`;
+  const focusProgress = (25 * 60 - focusSeconds) / (25 * 60);
+  const weekSessionCount = weekDays.reduce((total, day) => total + day.count, 0);
+
+  const toggleFocusTimer = () => {
+    if (focusSeconds === 0) {
+      focusSecondsRef.current = 25 * 60;
+      setFocusSeconds(25 * 60);
+    }
+    setTimerRunning((running) => !running);
+  };
+
+  const resetFocusTimer = () => {
+    focusSecondsRef.current = 25 * 60;
+    setFocusSeconds(25 * 60);
+    setTimerRunning(false);
   };
 
   return (
-    <main className="animated-bg min-h-screen overflow-x-hidden">
-      {/* Orbs — smaller on mobile to prevent overflow */}
-      <div className="orb orb-primary w-[300px] h-[300px] sm:w-[600px] sm:h-[600px] top-[-100px] left-[-80px]" />
-      <div className="orb orb-accent w-[200px] h-[200px] sm:w-[400px] sm:h-[400px] top-[300px] right-[-60px]" />
-      <div className="orb orb-pink w-[150px] h-[150px] sm:w-[300px] sm:h-[300px] bottom-[100px] left-[40%]" />
+    <main className="workspace-app">
+      <aside className="workspace-sidebar">
+        <Link href="/" className="workspace-brand" aria-label="StudySync overview">
+          <span className="workspace-brand-mark"><Sparkles size={17} aria-hidden="true" /></span>
+          <span>StudySync</span>
+        </Link>
 
-      {/* Nav */}
-      <nav className="relative z-10 flex items-center justify-between px-4 sm:px-6 py-4 max-w-7xl mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-4 h-4 text-white" />
+        <p className="workspace-nav-label">WORKSPACE</p>
+        <nav className="workspace-nav" aria-label="Workspace navigation">
+          <Link href="/" className="workspace-nav-item workspace-nav-item-active" aria-current="page">
+            <LayoutDashboard size={18} aria-hidden="true" />
+            <span>Overview</span>
+          </Link>
+          <Link href="/dashboard" className="workspace-nav-item">
+            <CalendarDays size={18} aria-hidden="true" />
+            <span>My schedule</span>
+          </Link>
+          <button type="button" className="workspace-nav-item" onClick={() => setSavedModalOpen(true)}>
+            <History size={18} aria-hidden="true" />
+            <span>Saved plans</span>
+            <span className="workspace-nav-count">{savedPlans.length}</span>
+          </button>
+        </nav>
+
+        <div className="workspace-sidebar-bottom">
+          <div className="workspace-sidebar-note">
+            <span className="workspace-sidebar-note-icon"><CheckCircle2 size={16} aria-hidden="true" /></span>
+            <span><strong>Made for real life</strong><small>Rest belongs in the plan.</small></span>
           </div>
-          <span className="font-bold text-base sm:text-lg">
-            StudySync <span className="gradient-text">AI</span>
-          </span>
+          <span className="workspace-version">STUDYSYNC · PERSONAL WORKSPACE</span>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3">
-          {savedCount > 0 && (
-            <button
-              onClick={() => setSavedModalOpen(true)}
-              className="btn btn-secondary text-xs sm:text-sm px-2.5 sm:px-3.5 py-1.5 flex items-center gap-1.5"
-              title="View timetable history on this device"
-            >
-              <History className="w-4 h-4 text-indigo-400" />
-              <span className="hidden xs:inline">History</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
-                {savedCount}
-              </span>
+      </aside>
+
+      <div className="workspace-main">
+        <header className="workspace-topbar">
+          <div className="workspace-breadcrumb">
+            <span>Workspace</span>
+            <ChevronRight size={14} aria-hidden="true" />
+            <strong>Overview</strong>
+          </div>
+          <div className="workspace-topbar-actions">
+            <button type="button" className="workspace-history-button" onClick={() => setSavedModalOpen(true)}>
+              <History size={16} aria-hidden="true" />
+              <span>Saved plans</span>
+              <span className="workspace-nav-count">{savedPlans.length}</span>
             </button>
-          )}
-          <Link href="/upload">
-            <button className="btn btn-primary text-sm sm:text-base px-3 sm:px-5">
-              <span className="hidden xs:inline">Get Started</span>
-              <span className="xs:hidden">Start</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </Link>
-        </div>
-      </nav>
+            <Link href="/upload" className="workspace-create-button">
+              <Plus size={17} aria-hidden="true" />
+              <span>New plan</span>
+            </Link>
+          </div>
+        </header>
 
-      {/* Hero */}
-      <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-12 sm:pb-16 text-center">
-        <div className="inline-flex items-center gap-2 glass px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm text-primary-400 mb-6 sm:mb-8 animate-fadeIn">
-          <Zap className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
-          AI-Powered · Health-First · Personalized
-        </div>
-
-        <h1 className="text-3xl sm:text-5xl md:text-7xl font-bold leading-tight mb-4 sm:mb-6 animate-fadeIn delay-100">
-          Your Syllabus,{' '}
-          <span className="gradient-text text-glow">Scheduled for</span>
-          <br />
-          Peak Performance
-        </h1>
-
-        <p className="text-base sm:text-lg md:text-xl text-[#888baa] max-w-2xl mx-auto mb-8 sm:mb-10 animate-fadeIn delay-200 px-2">
-          Upload your syllabus. Answer 5 quick questions about your lifestyle. Get a personalized,
-          health-conscious study timetable — exportable as a beautiful PDF.
-        </p>
-
-        <div className="flex flex-col xs:flex-row gap-3 sm:gap-4 justify-center animate-fadeIn delay-300 px-4 xs:px-0">
-          <Link href="/upload" className="w-full xs:w-auto">
-            <button className="btn btn-primary btn-lg glow-primary w-full xs:w-auto">
-              <Upload className="w-5 h-5 flex-shrink-0" />
-              Upload Your Syllabus
-            </button>
-          </Link>
-          <Link href="/dashboard" className="w-full xs:w-auto">
-            <button className="btn btn-secondary btn-lg w-full xs:w-auto">
-              <Calendar className="w-5 h-5 flex-shrink-0" />
-              View Demo Timetable
-            </button>
-          </Link>
-        </div>
-
-        {/* Stats */}
-        <div className="flex flex-wrap gap-6 sm:gap-8 justify-center mt-12 sm:mt-16 animate-fadeIn delay-400">
-          {[
-            { label: 'Subjects Parsed', value: '∞' },
-            { label: 'Health Guardrails', value: '7+' },
-            { label: 'Max Horizon', value: '2 years' },
-            { label: 'Export Formats', value: 'PDF' },
-          ].map((s) => (
-            <div key={s.label} className="text-center">
-              <div className="text-2xl sm:text-3xl font-bold gradient-text">{s.value}</div>
-              <div className="text-xs sm:text-sm text-[#888baa] mt-1">{s.label}</div>
+        <div className="workspace-content">
+          <section className="workspace-welcome">
+            <div>
+              <p className="workspace-overline">YOUR STUDY WORKSPACE</p>
+              <h1>{greeting}</h1>
+              <p>
+                {savedPlans.length > 0
+                  ? 'Pick up where you left off, or shape a new plan around your week.'
+                  : 'Build a study plan that fits around your classes, commitments, and rest.'}
+              </p>
             </div>
-          ))}
-        </div>
-      </section>
+            <Link href="/upload" className="workspace-welcome-cta">
+              <Plus size={18} aria-hidden="true" />
+              Create a study plan
+              <ChevronRight size={17} aria-hidden="true" />
+            </Link>
+          </section>
 
-      {/* How It Works */}
-      <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
-        <div className="text-center mb-10 sm:mb-14">
-          <div className="badge badge-primary mb-4">How It Works</div>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold">
-            From syllabus to timetable in <span className="gradient-text">3 steps</span>
-          </h2>
-        </div>
+          <section className="workspace-stat-grid" aria-label="Study plan summary">
+            <article className="workspace-stat">
+              <span className="workspace-stat-icon workspace-stat-icon-plans"><BookOpen size={17} aria-hidden="true" /></span>
+              <span className="workspace-stat-label">Saved plans</span>
+              <strong>{plansLoading ? '—' : savedPlans.length}</strong>
+              <small>On this device</small>
+            </article>
+            <article className="workspace-stat">
+              <span className="workspace-stat-icon workspace-stat-icon-sessions"><Clock3 size={17} aria-hidden="true" /></span>
+              <span className="workspace-stat-label">Study sessions</span>
+              <strong>{plansLoading ? '—' : totalSessions}</strong>
+              <small>Across your plans</small>
+            </article>
+            <article className="workspace-stat">
+              <span className="workspace-stat-icon workspace-stat-icon-done"><CheckCircle2 size={17} aria-hidden="true" /></span>
+              <span className="workspace-stat-label">Sessions completed</span>
+              <strong>{plansLoading ? '—' : completedSessions}</strong>
+              <small>Your progress so far</small>
+            </article>
+          </section>
 
-        <div className="grid sm:grid-cols-3 gap-4 sm:gap-6">
-          {steps.map((step, i) => (
-            <div
-              key={step.n}
-              className="card p-5 sm:p-6 animate-fadeIn"
-              style={{ animationDelay: `${i * 0.1}s`, opacity: 0 }}
-            >
-              <div className="text-5xl sm:text-6xl font-bold gradient-text opacity-20 mb-3 sm:mb-4">{step.n}</div>
-              <h3 className="text-lg sm:text-xl font-bold mb-2">{step.title}</h3>
-              <p className="text-[#888baa] text-sm leading-relaxed">{step.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
+          {plansError && <p className="workspace-error" role="alert">{plansError}</p>}
 
-      {/* Features */}
-      <section className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
-        <div className="text-center mb-10 sm:mb-14">
-          <div className="badge badge-primary mb-4">Features</div>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold">
-            Built for <span className="gradient-text">serious learners</span>
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-          {features.map((f, i) => {
-            const Icon = f.icon;
-            return (
-              <div
-                key={f.title}
-                className="card p-5 sm:p-6 animate-fadeIn"
-                style={{ animationDelay: `${i * 0.08}s`, opacity: 0 }}
-              >
-                <div
-                  className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center mb-3 sm:mb-4"
-                  style={{ background: `${f.color}22`, border: `1px solid ${f.color}44` }}
-                >
-                  <Icon className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: f.color }} />
+          <div className="workspace-tools-grid">
+            <section className="workspace-week-panel" aria-labelledby="workspace-week-title">
+              <div className="workspace-section-heading">
+                <div>
+                  <p className="workspace-overline">YOUR PLAN, AT A GLANCE</p>
+                  <h2 id="workspace-week-title">This week</h2>
                 </div>
-                <h3 className="font-bold text-base mb-2">{f.title}</h3>
-                <p className="text-[#888baa] text-sm leading-relaxed">{f.desc}</p>
+                <span className="workspace-week-total">
+                  <strong>{plansLoading ? '—' : weekSessionCount}</strong> sessions
+                </span>
               </div>
-            );
-          })}
-        </div>
-      </section>
+              {weekDays.length > 0 ? (
+                <div className="workspace-week-chart" role="group" aria-label="Select a day to view its sessions">
+                  {weekDays.map((day) => {
+                    const maxCount = Math.max(...weekDays.map((item) => item.count), 1);
+                    const barHeight = day.count > 0 ? Math.max((day.count / maxCount) * 100, 12) : 4;
+                    const isSelected = selectedDayKey === day.dateKey;
 
-      {/* CTA */}
-      <section className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 py-12 sm:py-20 text-center">
-        <div className="glass-strong p-6 sm:p-12 rounded-[20px] sm:rounded-[24px] glow-primary">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-3 sm:mb-4">
-            Ready to study <span className="gradient-text">smarter</span>?
-          </h2>
-          <p className="text-[#888baa] mb-6 sm:mb-8 max-w-lg mx-auto text-sm sm:text-base">
-            Join the health-first study revolution. Upload your syllabus and get your personalized timetable in minutes.
-          </p>
-          <Link href="/upload">
-            <button className="btn btn-primary btn-lg glow-primary w-full sm:w-auto">
-              <Upload className="w-5 h-5 flex-shrink-0" />
-              Start for Free — No Sign-Up Needed
-            </button>
+                    return (
+                      <button
+                        key={day.dateKey}
+                        type="button"
+                        className={`workspace-week-day ${isSelected ? 'workspace-week-day-selected' : ''}`}
+                        aria-label={`${format(day.date, 'EEEE, MMMM d')}, ${day.count} study sessions`}
+                        aria-pressed={isSelected}
+                        onClick={() => setSelectedDay(day.dateKey)}
+                      >
+                        <span className="workspace-week-day-name">{format(day.date, 'EEE')}</span>
+                        <span className="workspace-week-bar">
+                          <span style={{ height: `${barHeight}%` }} />
+                        </span>
+                        <strong>{format(day.date, 'd')}</strong>
+                        <small>{day.count}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="workspace-week-empty">
+                  {plansLoading ? 'Loading your schedule…' : 'Create or open a plan to see your week here.'}
+                </div>
+              )}
+              <div className="workspace-week-footer">
+                <span><i /> Sessions in your selected plan</span>
+                <Link href="/dashboard">Open full schedule <ChevronRight size={14} aria-hidden="true" /></Link>
+              </div>
+            </section>
+
+            <section className="workspace-focus-card" aria-labelledby="workspace-focus-title">
+              <div className="workspace-focus-heading">
+                <span className="workspace-focus-icon"><Brain size={17} aria-hidden="true" /></span>
+                <span className="workspace-overline">FOCUS TOOL</span>
+              </div>
+              <h2 id="workspace-focus-title">One thing at a time.</h2>
+              <p>A 25-minute focus sprint, then take a proper break.</p>
+              <div
+                className="workspace-focus-dial"
+                role="timer"
+                aria-label={`${Math.floor(focusSeconds / 60)} minutes ${focusSeconds % 60} seconds remaining`}
+              >
+                <svg viewBox="0 0 100 100" aria-hidden="true">
+                  <circle className="workspace-focus-track" cx="50" cy="50" r="44" />
+                  <circle
+                    className="workspace-focus-progress"
+                    cx="50"
+                    cy="50"
+                    r="44"
+                    style={{ strokeDashoffset: `${276.46 * focusProgress}` }}
+                  />
+                </svg>
+                <span><strong>{focusTimeLabel}</strong><small>MIN</small></span>
+              </div>
+              <div className="workspace-focus-actions">
+                <button type="button" className="workspace-focus-toggle" onClick={toggleFocusTimer}>
+                  {timerRunning ? <Pause size={15} aria-hidden="true" /> : <Play size={15} aria-hidden="true" />}
+                  {timerRunning ? 'Pause sprint' : focusSeconds === 0 ? 'Start again' : 'Start focus'}
+                </button>
+                <button type="button" className="workspace-focus-reset" onClick={resetFocusTimer} aria-label="Reset focus timer">
+                  <RotateCcw size={15} aria-hidden="true" />
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <div className="workspace-study-grid">
+            <section className="workspace-day-panel" aria-labelledby="workspace-day-title">
+              <div className="workspace-section-heading">
+                <div>
+                  <p className="workspace-overline">YOUR SELECTED DAY</p>
+                  <h2 id="workspace-day-title">
+                    {selectedDayKey === todayKey
+                      ? 'Today’s sessions'
+                      : selectedDayDate
+                      ? `${format(selectedDayDate, 'EEEE')}'s sessions`
+                      : 'Study sessions'}
+                  </h2>
+                </div>
+                <Link href="/dashboard" className="workspace-view-all">
+                  Schedule <ChevronRight size={15} aria-hidden="true" />
+                </Link>
+              </div>
+
+              {dayBlocks.length > 0 ? (
+                <div className="workspace-agenda">
+                  {dayBlocks.slice(0, 5).map((block) => (
+                    <article className={`workspace-agenda-row workspace-agenda-${block.status ?? 'upcoming'}`} key={block.id}>
+                      <span className="workspace-agenda-time">{block.startTime}</span>
+                      <span className="workspace-agenda-rail" aria-hidden="true" />
+                      <span className="workspace-agenda-icon"><BookOpen size={15} aria-hidden="true" /></span>
+                      <span className="workspace-agenda-details">
+                        <strong>{block.topicName || block.label}</strong>
+                        <small>{block.subjectName || 'Study session'}{block.chapterName ? ` · ${block.chapterName}` : ''}</small>
+                      </span>
+                      <span className="workspace-agenda-status">{block.status === 'completed' ? 'Done' : block.status === 'pending' ? 'To do' : block.endTime}</span>
+                    </article>
+                  ))}
+                  {dayBlocks.length > 5 && (
+                    <Link href="/dashboard" className="workspace-agenda-more">
+                      View {dayBlocks.length - 5} more sessions <ChevronRight size={14} aria-hidden="true" />
+                    </Link>
+                  )}
+                </div>
+              ) : (
+                <div className="workspace-day-empty">
+                  <CalendarDays size={21} aria-hidden="true" />
+                  <p>
+                    {activePlan
+                      ? `No study sessions planned for ${selectedDayKey === todayKey ? 'today' : selectedDayDate ? format(selectedDayDate, 'EEEE') : 'this day'}.`
+                      : 'Open a saved plan or add your syllabus to see your daily sessions here.'}
+                  </p>
+                  {!activePlan && (
+                    <Link href={savedPlans.length > 0 ? '/dashboard' : '/upload'}>
+                      {savedPlans.length > 0 ? 'Open your schedule' : 'Create a plan'} <ChevronRight size={14} aria-hidden="true" />
+                    </Link>
+                  )}
+                </div>
+              )}
+            </section>
+
+            <section className="workspace-subject-panel" aria-labelledby="workspace-subject-title">
+              <div className="workspace-section-heading">
+                <div>
+                  <p className="workspace-overline">LATEST PLAN</p>
+                  <h2 id="workspace-subject-title">Subject progress</h2>
+                </div>
+                {activePlan && <span className="workspace-subject-count">{subjects.length}</span>}
+              </div>
+              {subjects.length > 0 ? (
+                <div className="workspace-subject-list">
+                  {subjects.map((subject) => {
+                    const progress = subject.sessions > 0 ? Math.round((subject.completed / subject.sessions) * 100) : 0;
+
+                    return (
+                      <div className="workspace-subject" key={subject.name}>
+                        <div className="workspace-subject-label">
+                          <span><i style={{ backgroundColor: subject.color }} />{subject.name}</span>
+                          <small>{subject.completed}/{subject.sessions}</small>
+                        </div>
+                        <div className="workspace-subject-track" aria-label={`${subject.name}: ${progress}% complete`}>
+                          <span style={{ width: `${progress}%`, backgroundColor: subject.color }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="workspace-subject-empty">
+                  <p>{activePlan ? 'No subject breakdown is available for this plan.' : 'Subject progress will appear after you open a study plan.'}</p>
+                </div>
+              )}
+              {activePlan && (
+                <Link href="/dashboard" className="workspace-subject-link">
+                  Open progress tracker <ChevronRight size={14} aria-hidden="true" />
+                </Link>
+              )}
+            </section>
+          </div>
+
+          <section className="workspace-plans-panel" aria-labelledby="workspace-plans-title">
+            <div className="workspace-section-heading">
+              <div>
+                <p className="workspace-overline">YOUR LIBRARY</p>
+                <h2 id="workspace-plans-title">Study plans</h2>
+              </div>
+              <button type="button" className="workspace-view-all" onClick={() => setSavedModalOpen(true)}>
+                View all <ChevronRight size={15} aria-hidden="true" />
+              </button>
+            </div>
+
+            {plansLoading ? (
+              <div className="workspace-plans-loading" role="status">Loading your saved plans…</div>
+            ) : savedPlans.length === 0 ? (
+              <div className="workspace-empty-state">
+                <span className="workspace-empty-icon"><FileText size={23} aria-hidden="true" /></span>
+                <h3>Your plans will live here</h3>
+                <p>Start with a syllabus, class notes, or a list of chapters. We&apos;ll help you shape the week around them.</p>
+                <Link href="/upload" className="workspace-empty-cta">
+                  <Upload size={16} aria-hidden="true" />
+                  Add your first syllabus
+                </Link>
+              </div>
+            ) : (
+              <div className="workspace-plan-list">
+                {savedPlans.map((plan) => {
+                  const progress = plan.studyBlocksCount > 0
+                    ? Math.round((plan.completedBlocksCount / plan.studyBlocksCount) * 100)
+                    : 0;
+
+                  return (
+                    <article key={plan.id} className="workspace-plan-card">
+                      <div className="workspace-plan-icon"><CalendarDays size={19} aria-hidden="true" /></div>
+                      <div className="workspace-plan-info">
+                        <h3>{plan.title}</h3>
+                        <p>
+                          Updated {formatPlanDate(plan.updatedAt)}
+                          <span aria-hidden="true">·</span>
+                          {plan.horizonDays}-day plan
+                          <span aria-hidden="true">·</span>
+                          {plan.totalSubjects} {plan.totalSubjects === 1 ? 'subject' : 'subjects'}
+                        </p>
+                        <div className="workspace-plan-progress" aria-label={`${progress}% complete`}>
+                          <span><span style={{ width: `${progress}%` }} /></span>
+                          <small>{plan.completedBlocksCount} of {plan.studyBlocksCount} sessions</small>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="workspace-open-plan"
+                        onClick={() => void handleSelectTimetable(plan.id)}
+                      >
+                        Open <ChevronRight size={16} aria-hidden="true" />
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <nav className="workspace-mobile-nav" aria-label="App navigation">
+          <Link href="/" className="workspace-mobile-nav-item workspace-mobile-nav-active" aria-current="page">
+            <LayoutDashboard size={19} aria-hidden="true" />
+            <span>Home</span>
           </Link>
-          <p className="text-[#555] text-xs mt-4 flex items-center justify-center gap-1">
-            <Clock className="w-3 h-3" /> Takes less than 3 minutes
-          </p>
-        </div>
-      </section>
+          <Link href="/dashboard" className="workspace-mobile-nav-item">
+            <CalendarDays size={19} aria-hidden="true" />
+            <span>Schedule</span>
+          </Link>
+          <Link href="/upload" className="workspace-mobile-nav-item">
+            <Plus size={20} aria-hidden="true" />
+            <span>Create</span>
+          </Link>
+          <button type="button" className="workspace-mobile-nav-item" onClick={() => setSavedModalOpen(true)}>
+            <History size={19} aria-hidden="true" />
+            <span>Saved</span>
+          </button>
+        </nav>
+      </div>
 
-      {/* Footer */}
-      <footer className="relative z-10 text-center text-[#444] text-xs pb-8 px-4">
-        StudySync AI — Health-First Timetable Maker · Built with ❤️ for learners everywhere
-      </footer>
-
-      {/* History Modal */}
       <SavedTimetablesModal
         isOpen={savedModalOpen}
         onClose={() => setSavedModalOpen(false)}
@@ -267,8 +530,6 @@ export default function HomePage() {
           setPdfModalOpen(true);
         }}
       />
-
-      {/* In-App PDF Modal */}
       <InAppPdfModal
         isOpen={pdfModalOpen}
         onClose={() => setPdfModalOpen(false)}

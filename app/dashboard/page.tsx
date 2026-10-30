@@ -742,7 +742,7 @@ export default function DashboardPage() {
   } : null;
 
   return (
-    <main className="min-h-screen bg-[#09090f] overflow-hidden">
+    <main className="relative min-h-screen overflow-hidden">
       {/* Block Status Modal */}
       {selectedBlock && (
         <BlockModal

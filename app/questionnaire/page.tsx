@@ -530,10 +530,7 @@ export default function QuestionnairePage() {
   ];
 
   return (
-    <main className="animated-bg min-h-screen overflow-x-hidden">
-      <div className="orb orb-accent w-[200px] h-[200px] sm:w-[400px] sm:h-[400px] top-[-60px] left-[-60px]" />
-      <div className="orb orb-pink w-[150px] h-[150px] sm:w-[300px] sm:h-[300px] bottom-[80px] right-[-50px]" />
-
+    <main className="min-h-screen overflow-x-hidden">
       {/* Nav */}
       <nav className="relative z-10 flex items-center justify-between px-4 sm:px-6 py-4 max-w-3xl mx-auto">
         <Link href="/" className="flex items-center gap-2">

@@ -25,9 +25,16 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={inter.variable} data-scroll-behavior="smooth">
       <body className="bg-[#09090f] text-white antialiased min-h-screen">
-        {children}
+        <div className="ambient-backdrop" aria-hidden="true">
+          <span className="ambient-glow ambient-glow-indigo" />
+          <span className="ambient-glow ambient-glow-violet" />
+          <span className="ambient-glow ambient-glow-teal" />
+          <span className="ambient-glow ambient-glow-sage" />
+          <span className="ambient-grid" />
+        </div>
+        <div className="app-content">{children}</div>
       </body>
     </html>
   );

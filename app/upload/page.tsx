@@ -6,22 +6,23 @@ import { useRouter } from 'next/navigation';
 import {
   Upload,
   FileText,
-  Image,
+  Image as ImageIcon,
   CheckCircle,
+  Heart,
   Loader2,
   Sparkles,
   AlertTriangle,
   ChevronRight,
   X,
   Edit3,
-  Key,
   Info,
+  LayoutDashboard,
+  CalendarDays,
 } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { parseSyllabus, parseTextWithAPI } from '@/lib/syllabusParser';
 import { ParsedSyllabus } from '@/lib/types';
 import Link from 'next/link';
-import ApiKeyModal, { getStoredGeminiKey } from '@/components/ApiKeyModal';
 
 type ParseState = 'idle' | 'parsing' | 'done' | 'error';
 type InputMode = 'file' | 'paste' | 'chapters';
@@ -75,17 +76,13 @@ export default function UploadPage() {
   const [chapterInput, setChapterInput] = useState<string>('');
   const [customTitle, setCustomTitle] = useState<string>('');
 
-  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
-  const [hasApiKey, setHasApiKey] = useState(false);
-
   const [parseState, setParseState] = useState<ParseState>('idle');
   const [parseStep, setParseStep] = useState(0);
   const [result, setResult] = useState<ParsedSyllabus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync API key state on mount
   useEffect(() => {
-    setHasApiKey(!!getStoredGeminiKey());
+    localStorage.removeItem('studysync_gemini_api_key');
   }, []);
 
   const onDrop = useCallback((accepted: File[]) => {
@@ -99,9 +96,22 @@ export default function UploadPage() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    onDropRejected: (fileRejections) => {
+      const rejection = fileRejections[0]?.errors[0];
+      setError(
+        rejection?.code === 'file-too-large'
+          ? 'That file is over the 20 MB limit. Choose a smaller file or paste the syllabus text instead.'
+          : rejection?.code === 'file-invalid-type'
+          ? 'That file type is not supported. Choose a PDF, image, TXT, or Markdown file.'
+          : rejection?.message ?? 'We could not add that file. Try another file or paste the syllabus text.',
+      );
+      setParseState('error');
+      setResult(null);
+    },
     accept: ACCEPTED_TYPES,
     maxFiles: 1,
     maxSize: 20 * 1024 * 1024, // 20 MB
+    disabled: parseState === 'parsing',
   });
 
   const handleParse = async () => {
@@ -133,7 +143,7 @@ export default function UploadPage() {
       setParseStep(PARSE_STEPS.length - 1);
       setResult(parsed);
       setParseState('done');
-    } catch (e: any) {
+    } catch (e: unknown) {
       clearInterval(interval);
       setError(e instanceof Error ? e.message : 'Failed to parse syllabus');
       setParseState('error');
@@ -151,123 +161,174 @@ export default function UploadPage() {
     ? <FileText className="w-7 h-7 sm:w-8 sm:h-8 text-primary-400" />
     : file?.name.endsWith('.txt') || file?.name.endsWith('.md')
     ? <Edit3 className="w-7 h-7 sm:w-8 sm:h-8 text-primary-400" />
-    : <Image className="w-7 h-7 sm:w-8 sm:h-8 text-primary-400" />;
+    : <ImageIcon className="w-7 h-7 sm:w-8 sm:h-8 text-primary-400" />;
+  const activeText = inputMode === 'chapters' ? chapterInput : pastedText;
+  const activeLineCount = activeText.split(/\r?\n/).filter((line) => line.trim()).length;
 
   return (
-    <main className="animated-bg min-h-screen overflow-x-hidden">
-      <div className="orb orb-primary w-[250px] h-[250px] sm:w-[500px] sm:h-[500px] top-[-80px] right-[-80px]" />
-      <div className="orb orb-accent w-[180px] h-[180px] sm:w-[300px] sm:h-[300px] bottom-[100px] left-[-60px]" />
-
-      {/* AI Key Setup Modal */}
-      <ApiKeyModal
-        isOpen={isKeyModalOpen}
-        onClose={() => {
-          setIsKeyModalOpen(false);
-          setHasApiKey(!!getStoredGeminiKey());
-        }}
-      />
-
-      {/* Nav */}
-      <nav className="relative z-10 flex items-center justify-between px-4 sm:px-6 py-4 max-w-5xl mx-auto">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent flex items-center justify-center flex-shrink-0">
-            <Sparkles className="w-4 h-4 text-white" />
-          </div>
-          <span className="font-bold text-base sm:text-lg">
-            StudySync <span className="gradient-text">AI</span>
-          </span>
+    <main className="workspace-app upload-app">
+      <aside className="workspace-sidebar">
+        <Link href="/" className="workspace-brand" aria-label="StudySync overview">
+          <span className="workspace-brand-mark"><Sparkles size={17} aria-hidden="true" /></span>
+          <span>StudySync</span>
         </Link>
-        <div className="flex items-center gap-2 text-sm text-[#888baa]">
-          <span className="badge badge-primary">✨ AI Powered</span>
-          <span className="text-xs text-[#888baa] hidden sm:inline-flex">Step 1 of 2</span>
+        <p className="workspace-nav-label">WORKSPACE</p>
+        <nav className="workspace-nav" aria-label="Workspace navigation">
+          <Link href="/" className="workspace-nav-item">
+            <LayoutDashboard size={18} aria-hidden="true" />
+            <span>Overview</span>
+          </Link>
+          <Link href="/dashboard" className="workspace-nav-item">
+            <CalendarDays size={18} aria-hidden="true" />
+            <span>My schedule</span>
+          </Link>
+          <Link href="/upload" className="workspace-nav-item workspace-nav-item-active" aria-current="page">
+            <Upload size={18} aria-hidden="true" />
+            <span>Add material</span>
+          </Link>
+        </nav>
+        <div className="workspace-sidebar-bottom">
+          <div className="workspace-sidebar-note">
+            <span className="workspace-sidebar-note-icon"><Heart size={16} aria-hidden="true" /></span>
+            <span><strong>Plan for your real week</strong><small>Classes, breaks, and rest count.</small></span>
+          </div>
+          <span className="workspace-version">STUDYSYNC · PLAN BUILDER</span>
         </div>
-      </nav>
+      </aside>
 
-      <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
-        <div className="text-center mb-6 sm:mb-8 animate-fadeIn">
-          <h1 className="text-3xl sm:text-4xl font-bold mb-3">
-            Add Your <span className="gradient-text">Syllabus & Notes</span>
-          </h1>
-          <p className="text-[#888baa] text-sm sm:text-base">
-            Upload your document or paste notes directly. The scheduler extracts your actual topics.
-          </p>
-        </div>
+      <div className="workspace-main">
+        <header className="workspace-topbar">
+          <div className="workspace-breadcrumb">
+            <Link href="/">Workspace</Link>
+            <ChevronRight size={14} aria-hidden="true" />
+            <strong>New study plan</strong>
+          </div>
+          <div className="workspace-topbar-actions">
+            <span className="upload-topbar-progress"><span /> Step 1 of 3</span>
+            <Link href="/" className="upload-exit-link">Exit builder</Link>
+          </div>
+        </header>
+
+        <div className="workspace-content upload-app-content">
+          <section className="upload-page-heading">
+            <div>
+              <p className="workspace-overline">BUILD YOUR STUDY PLAN <span>·</span> STEP 01</p>
+              <h1>Add your course material</h1>
+              <p>Start with a syllabus, lecture notes, or a simple chapter list. We&apos;ll organize it into study topics.</p>
+            </div>
+          </section>
+
+          <nav className="upload-stepper" aria-label="Study plan steps">
+            <div className="upload-step upload-step-current" aria-current="step">
+              <span>01</span><strong>Course material</strong>
+            </div>
+            <span className="upload-step-connector" aria-hidden="true" />
+            <div className="upload-step">
+              <span>02</span><strong>Your week</strong>
+            </div>
+            <span className="upload-step-connector" aria-hidden="true" />
+            <div className="upload-step">
+              <span>03</span><strong>Study plan</strong>
+            </div>
+          </nav>
+
+          <div className="upload-app-grid">
+          <section className="upload-workspace" aria-labelledby="upload-workspace-title">
+          <div className="upload-workspace-heading">
+            <div>
+              <p>CHOOSE WHAT YOU HAVE</p>
+              <h2 id="upload-workspace-title">Add your material</h2>
+            </div>
+            <span className="upload-workspace-index">STEP 01 / 03</span>
+          </div>
 
         {/* Input Mode Selector */}
-        <div className="flex justify-center mb-6">
-          <div className="glass p-1 rounded-xl inline-flex gap-1 flex-wrap justify-center">
+        <div className="upload-mode-switch" role="group" aria-label="Choose syllabus input method">
             <button
-              onClick={() => { setInputMode('file'); setParseState('idle'); setResult(null); }}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 ${
+              type="button"
+              disabled={parseState === 'parsing'}
+              aria-pressed={inputMode === 'file'}
+              onClick={() => { setInputMode('file'); setParseState('idle'); setResult(null); setError(null); }}
+              className={`upload-mode ${
                 inputMode === 'file'
-                  ? 'bg-primary-600 text-white shadow-lg'
-                  : 'text-[#888baa] hover:text-white'
+                  ? 'upload-mode-active'
+                  : ''
               }`}
             >
-              <Upload className="w-4 h-4" /> Upload Document
+              <Upload size={16} aria-hidden="true" />
+              <span><strong>Upload a file</strong><small>PDF, image, or text file</small></span>
             </button>
             <button
-              onClick={() => { setInputMode('chapters'); setParseState('idle'); setResult(null); }}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 ${
+              type="button"
+              disabled={parseState === 'parsing'}
+              aria-pressed={inputMode === 'chapters'}
+              onClick={() => { setInputMode('chapters'); setParseState('idle'); setResult(null); setError(null); }}
+              className={`upload-mode ${
                 inputMode === 'chapters'
-                  ? 'bg-accent text-white shadow-lg'
-                  : 'text-[#888baa] hover:text-white'
+                  ? 'upload-mode-active'
+                  : ''
               }`}
             >
-              <Sparkles className="w-4 h-4" /> Enter Chapter Names
+              <Sparkles size={16} aria-hidden="true" />
+              <span><strong>List chapters</strong><small>One chapter per line</small></span>
             </button>
             <button
-              onClick={() => { setInputMode('paste'); setParseState('idle'); setResult(null); }}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-all flex items-center gap-2 ${
+              type="button"
+              disabled={parseState === 'parsing'}
+              aria-pressed={inputMode === 'paste'}
+              onClick={() => { setInputMode('paste'); setParseState('idle'); setResult(null); setError(null); }}
+              className={`upload-mode ${
                 inputMode === 'paste'
-                  ? 'bg-primary-600 text-white shadow-lg'
-                  : 'text-[#888baa] hover:text-white'
+                  ? 'upload-mode-active'
+                  : ''
               }`}
             >
-              <Edit3 className="w-4 h-4" /> Paste Full Notes
+              <Edit3 size={16} aria-hidden="true" />
+              <span><strong>Paste notes</strong><small>Syllabus or lecture notes</small></span>
             </button>
-          </div>
         </div>
 
         {/* File Dropzone Mode */}
         {inputMode === 'file' && (
           <div
             {...getRootProps()}
-            className={`dropzone p-6 sm:p-12 text-center animate-fadeIn delay-100 ${isDragActive ? 'active' : ''}`}
+            className={`upload-dropzone ${isDragActive ? 'upload-dropzone-active' : ''} ${file ? 'upload-dropzone-has-file' : ''}`}
           >
             <input {...getInputProps()} />
 
             {file ? (
-              <div className="flex flex-col items-center gap-3">
-                {fileIcon}
-                <div>
+              <div className="upload-file-selected">
+                <span className="upload-file-icon">{fileIcon}</span>
+                <div className="upload-file-details">
                   <p className="font-semibold text-white text-sm sm:text-base break-all">{file.name}</p>
-                  <p className="text-sm text-[#888baa]">{(file.size / 1024).toFixed(0)} KB</p>
+                  <p className="text-sm text-[#888baa]">{(file.size / 1024).toFixed(0)} KB · Ready to analyze</p>
                 </div>
                 <button
+                  type="button"
+                  disabled={parseState === 'parsing'}
                   onClick={(e) => { e.stopPropagation(); setFile(null); setResult(null); setParseState('idle'); }}
-                  className="btn btn-ghost text-xs"
+                  aria-label="Remove selected file"
+                  className="upload-file-remove"
                 >
-                  <X className="w-3 h-3" /> Remove
+                  <X size={16} aria-hidden="true" /> Remove
                 </button>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl glass flex items-center justify-center">
-                  <Upload className="w-7 h-7 sm:w-8 sm:h-8 text-primary-400" />
+              <div className="upload-dropzone-content">
+                <div className="upload-drop-illustration" aria-hidden="true">
+                  <FileText className="upload-drop-paper" size={38} />
+                  <span><Upload size={17} /></span>
                 </div>
                 <div>
-                  <p className="font-semibold text-base sm:text-lg">
-                    {isDragActive ? 'Drop it here!' : 'Drag & drop your syllabus or notes'}
+                  <p className="upload-drop-title">
+                    {isDragActive ? 'That’s it — let go to add your file' : 'Drop your syllabus here'}
                   </p>
-                  <p className="text-[#888baa] text-sm mt-1">PDF, PNG, JPG, or TXT / Markdown</p>
+                  <p className="upload-drop-subtitle">or click anywhere in this area to browse your files</p>
                 </div>
-                <div className="flex gap-2 flex-wrap justify-center">
-                  {['PDF', 'PNG', 'JPG', 'TXT', 'Notes'].map((t) => (
-                    <span key={t} className="badge badge-primary">{t}</span>
-                  ))}
+                <div className="upload-file-types" aria-label="Accepted file types">
+                  <span>PDF</span><span>PNG</span><span>JPG</span><span>WEBP</span><span>TXT</span><span>MD</span>
                 </div>
-                <p className="text-xs text-[#555]">Max 20 MB</p>
+                <p className="upload-file-limit">Up to 20 MB</p>
               </div>
             )}
           </div>
@@ -277,11 +338,13 @@ export default function UploadPage() {
         {inputMode === 'paste' && (
           <div className="card p-5 sm:p-6 animate-fadeIn space-y-4">
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-[#888baa] mb-1.5">
+              <label htmlFor="pasted-syllabus-title" className="block text-xs font-semibold uppercase tracking-wider text-[#888baa] mb-1.5">
                 Syllabus Title (optional)
               </label>
               <input
+                id="pasted-syllabus-title"
                 type="text"
+                disabled={parseState === 'parsing'}
                 placeholder="e.g. Higher Mathematics, JavaScript Mastery, Physics 101"
                 value={customTitle}
                 onChange={(e) => setCustomTitle(e.target.value)}
@@ -291,12 +354,14 @@ export default function UploadPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[#888baa]">
+                <label htmlFor="pasted-syllabus-text" className="block text-xs font-semibold uppercase tracking-wider text-[#888baa]">
                   Paste Full Syllabus or Notes
                 </label>
               </div>
               <textarea
+                id="pasted-syllabus-text"
                 rows={8}
+                disabled={parseState === 'parsing'}
                 placeholder="Paste your chapters, topics, bullet points, or lecture notes here..."
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
@@ -304,7 +369,7 @@ export default function UploadPage() {
               />
             </div>
             <p className="text-xs text-[#888baa]">
-              Works instantly even offline! The local engine groups chapters and estimates hours automatically.
+              Paste a structured syllabus or notes. Clear headings and chapter names help us organize topics.
             </p>
           </div>
         )}
@@ -316,7 +381,7 @@ export default function UploadPage() {
             <div className="flex items-start gap-3 p-3.5 rounded-xl bg-accent/10 border border-accent/30">
               <Info className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-accent">AI Knowledge Mode ✨</p>
+                <p className="text-sm font-semibold text-accent">Smart topic expansion</p>
                 <p className="text-xs text-[#a5b4fc] mt-0.5">
                   Just type your chapter names with class/grade. The AI will automatically expand each chapter into granular sub-topics with difficulty levels — using its academic knowledge base (CBSE, JEE, NEET, UPSC, University curricula).
                 </p>
@@ -324,11 +389,13 @@ export default function UploadPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-[#888baa] mb-1.5">
+              <label htmlFor="chapter-course-title" className="block text-xs font-semibold uppercase tracking-wider text-[#888baa] mb-1.5">
                 Course / Exam Title
               </label>
               <input
+                id="chapter-course-title"
                 type="text"
+                disabled={parseState === 'parsing'}
                 placeholder="e.g. Class 12 Physics & Chemistry, JEE Mains 2025, UPSC GS Paper 1"
                 value={customTitle}
                 onChange={(e) => setCustomTitle(e.target.value)}
@@ -338,7 +405,7 @@ export default function UploadPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[#888baa]">
+                <label htmlFor="chapter-names" className="block text-xs font-semibold uppercase tracking-wider text-[#888baa]">
                   Chapter Names (one per line)
                 </label>
                 <div className="flex gap-2">
@@ -365,7 +432,9 @@ export default function UploadPage() {
                 </div>
               </div>
               <textarea
+                id="chapter-names"
                 rows={9}
+                disabled={parseState === 'parsing'}
                 placeholder={`Enter chapter names with class/subject info. Examples:
 
 Class 12 Physics
@@ -382,18 +451,17 @@ Class 12 Chemistry
               />
             </div>
             <p className="text-xs text-[#888baa]">
-              ⚡ Gemini AI will fetch detailed sub-topics from its knowledge of NCERT, JEE, NEET, UPSC syllabi and classify each by difficulty level.
+              Add the course or exam name too, so chapter topics can be expanded in the right context.
             </p>
           </div>
         )}
 
-        {/* Built-in Demo Section */}
-        <div className="text-center my-5 sm:my-6 text-sm text-[#666]">
-          — or explore sample syllabi —
-        </div>
-        <div className="glass p-4 rounded-xl text-center animate-fadeIn delay-200">
-          <p className="text-sm text-[#888baa] mb-3">Try with a pre-configured sample syllabus</p>
-          <div className="flex flex-col xs:flex-row gap-2.5 justify-center flex-wrap">
+        <details className="upload-samples">
+          <summary>
+            <span>Not ready with a syllabus?</span>
+            <span>Try a sample <ChevronRight size={15} aria-hidden="true" /></span>
+          </summary>
+          <div className="upload-sample-options">
             {[
               { label: 'Biology Class 12 (CBSE)', idx: 2 },
               { label: 'CS Engineering Sem 5', idx: 0 },
@@ -401,6 +469,8 @@ Class 12 Chemistry
             ].map((demo) => (
               <button
                 key={demo.label}
+                type="button"
+                disabled={parseState === 'parsing'}
                 onClick={async () => {
                   setParseState('parsing');
                   const { parseWithMock } = await import('@/lib/syllabusParser');
@@ -409,14 +479,41 @@ Class 12 Chemistry
                   setParseState('done');
                   setFile({ name: `${demo.label}.pdf`, size: 0 } as File);
                 }}
-                className={`btn text-sm w-full xs:w-auto ${
-                  demo.idx === 2 ? 'btn-primary glow-primary' : 'btn-secondary'
-                }`}
+                className="upload-sample-button"
               >
-                <FileText className="w-4 h-4 flex-shrink-0" /> {demo.label}
+                <FileText size={15} aria-hidden="true" /> {demo.label}
               </button>
             ))}
           </div>
+        </details>
+
+        <div className="upload-source-summary" aria-live="polite">
+          <span className="upload-source-icon">
+            {parseState === 'error'
+              ? <AlertTriangle size={16} aria-hidden="true" />
+              : parseState === 'done'
+              ? <CheckCircle size={16} aria-hidden="true" />
+              : <FileText size={16} aria-hidden="true" />}
+          </span>
+          <span className="upload-source-copy">
+            <small>{parseState === 'error' ? 'CHECK YOUR INPUT' : parseState === 'done' ? 'MATERIAL READY' : 'CURRENT MATERIAL'}</small>
+            <strong>
+              {parseState === 'error'
+                ? 'Needs attention'
+                : parseState === 'done'
+                ? 'Topics organized'
+                : inputMode === 'file'
+                ? file?.name ?? 'No file added yet'
+                : activeLineCount
+                ? `${activeLineCount} ${activeLineCount === 1 ? 'line' : 'lines'} added`
+                : 'Nothing added yet'}
+            </strong>
+          </span>
+          <span className="upload-source-detail">
+            {inputMode === 'file'
+              ? file ? `${(file.size / 1024).toFixed(0)} KB` : 'Up to 20 MB'
+              : inputMode === 'chapters' ? 'Chapter list' : 'Pasted notes'}
+          </span>
         </div>
 
         {/* Action Button */}
@@ -429,23 +526,17 @@ Class 12 Chemistry
                 : inputMode === 'chapters' ? !chapterInput.trim()
                 : !pastedText.trim()
               }
-              className={`btn btn-lg w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed ${
-                inputMode === 'chapters'
-                  ? 'bg-gradient-to-r from-accent to-primary-500 hover:from-purple-600 hover:to-primary-600 text-white glow-primary'
-                  : 'btn-primary glow-primary'
-              }`}
+              className="upload-submit"
             >
               <Sparkles className="w-5 h-5 flex-shrink-0" />
               {inputMode === 'chapters'
-                ? 'Generate Topics with AI Knowledge'
+                ? 'Build my topic list'
                 : inputMode === 'paste'
-                ? 'Parse Pasted Notes'
-                : 'Parse Syllabus with AI'}
+                ? 'Organize my notes'
+                : 'Find my syllabus topics'}
             </button>
             {inputMode === 'chapters' && (
-              <p className="text-xs text-[#888baa] mt-2">
-                AI will expand your chapters using its academic knowledge (NCERT / JEE / NEET / UPSC)
-              </p>
+              <p className="text-xs text-[#888baa] mt-2">You can review the topics before building your schedule.</p>
             )}
           </div>
         )}
@@ -509,7 +600,7 @@ Class 12 Chemistry
               <div className="sm:ml-auto flex items-center gap-2">
                 {result.source === 'demo' ? (
                   <span className="badge badge-secondary text-xs">Sample / Demo Data</span>
-                ) : result.source === 'gemini-ai' || result.source === 'openai' ? (
+                ) : result.source === 'meta-ai' || result.source === 'openai' ? (
                   <span className="badge badge-primary text-xs">
                     {(result.parseConfidence * 100).toFixed(0)}% AI confidence
                   </span>
@@ -517,8 +608,8 @@ Class 12 Chemistry
                   <span className="badge badge-secondary text-xs">Fallback estimates</span>
                 )}
                 <span className="text-xs text-[#888baa]">
-                  {result.source === 'gemini-ai'
-                    ? '✨ Gemini AI'
+                  {result.source === 'meta-ai'
+                    ? '✨ Meta AI'
                     : result.source === 'openai'
                     ? '🤖 OpenAI'
                     : result.source === 'smart-engine'
@@ -615,19 +706,64 @@ Class 12 Chemistry
             </div>
 
             <button onClick={handleContinue} className="btn btn-primary btn-lg w-full glow-primary">
-              Continue to Questionnaire <ChevronRight className="w-5 h-5 flex-shrink-0" />
+              Continue to weekly routine <ChevronRight className="w-5 h-5 flex-shrink-0" />
             </button>
           </div>
         )}
-        {/* Optional Custom API Key Trigger */}
-        <div className="mt-8 text-center">
-          <button
-            onClick={() => setIsKeyModalOpen(true)}
-            className="text-[11px] text-[#555870] hover:text-[#888baa] transition-colors underline"
-          >
-            Custom API Key Settings (Optional)
-          </button>
+        </section>
+
+          <aside className="upload-guide-panel" aria-label="Material tips and next steps">
+            <div className="upload-guide-intro">
+              <span className="upload-guide-icon"><Sparkles size={17} aria-hidden="true" /></span>
+              <p className="workspace-overline">QUICK GUIDE</p>
+              <h2>{inputMode === 'file' ? 'Bring your course outline' : inputMode === 'chapters' ? 'Give each chapter context' : 'Start with readable notes'}</h2>
+              <p>
+                {inputMode === 'file'
+                  ? 'A syllabus or course outline gives the topic organizer the clearest structure to work with.'
+                  : inputMode === 'chapters'
+                  ? 'Add the course or exam name, then put each chapter on its own line.'
+                  : 'Headings and chapter names make it easier to group related material.'}
+              </p>
+            </div>
+
+            <div className="upload-guide-divider" />
+            <p className="upload-guide-label">A FEW HELPFUL TIPS</p>
+            <ul className="upload-guide-list">
+              <li><CheckCircle size={15} aria-hidden="true" /><span>Include the subject or course name.</span></li>
+              <li><CheckCircle size={15} aria-hidden="true" /><span>Keep chapter headings in the material.</span></li>
+              <li><CheckCircle size={15} aria-hidden="true" /><span>You can review topics before scheduling.</span></li>
+            </ul>
+
+            {inputMode === 'file' && (
+              <div className="upload-guide-formats">
+                <span>SUPPORTED FILES</span>
+                <p>PDF · PNG · JPG · WEBP · TXT · MD</p>
+                <small>Maximum file size: 20 MB</small>
+              </div>
+            )}
+
+            <div className="upload-guide-next">
+              <span>02</span>
+              <div>
+                <strong>Next: shape your week</strong>
+                <p>Add classes, routines, and the time you have for studying.</p>
+              </div>
+            </div>
+          </aside>
+          </div>
         </div>
+
+        <nav className="workspace-mobile-nav upload-mobile-nav" aria-label="Mobile workspace navigation">
+          <Link href="/" className="workspace-mobile-nav-item">
+            <LayoutDashboard size={18} aria-hidden="true" /><span>Home</span>
+          </Link>
+          <Link href="/dashboard" className="workspace-mobile-nav-item">
+            <CalendarDays size={18} aria-hidden="true" /><span>Schedule</span>
+          </Link>
+          <Link href="/upload" className="workspace-mobile-nav-item workspace-mobile-nav-active" aria-current="page">
+            <Upload size={18} aria-hidden="true" /><span>Add material</span>
+          </Link>
+        </nav>
       </div>
     </main>
   );
