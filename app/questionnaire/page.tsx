@@ -5,8 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/store/appStore';
 import { AvailabilityProfile, TimeWindow, DayOfWeek, SessionLength, PeakEnergy, Occupation } from '@/lib/types';
 import { generateSchedule } from '@/lib/scheduler';
-import { saveTimetableLocally } from '@/lib/localTimetableStorage';
-import { generatePDFData } from '@/lib/pdfExport';
 import Link from 'next/link';
 import {
   Sparkles, ChevronRight, ChevronLeft, Briefcase, Clock, UtensilsCrossed,
@@ -474,7 +472,7 @@ function HorizonStep({ profile, onChange }: { profile: AvailabilityProfile; onCh
 
 export default function QuestionnairePage() {
   const router = useRouter();
-  const { syllabus, setProfile, setSchedule, setStep, setGenerating } = useAppStore();
+  const { syllabus, setProfile, setSchedule, setActiveTimetableId, setStep, setGenerating } = useAppStore();
 
   const [step, setLocalStep] = useState(0);
   const [profile, setLocalProfile] = useState<AvailabilityProfile>(defaultProfile);
@@ -499,20 +497,10 @@ export default function QuestionnairePage() {
       await new Promise((r) => setTimeout(r, 800)); // simulate slight delay
       const result = generateSchedule(syllabus, profile);
       setProfile(profile);
+      setActiveTimetableId(null);
       setSchedule(result.blocks, result.warning);
       setWarning(result.warning);
       setStep(3);
-
-      // Auto-save locally on user's device & pre-generate PDF for instant in-app access
-      try {
-        const { dataUri } = generatePDFData({ syllabus, profile, blocks: result.blocks });
-        await saveTimetableLocally(syllabus, profile, result.blocks, dataUri);
-      } catch (saveErr) {
-        console.warn('[Questionnaire] Local timetable save warning:', saveErr);
-        try {
-          await saveTimetableLocally(syllabus, profile, result.blocks);
-        } catch {}
-      }
 
       router.push('/dashboard');
     } finally {

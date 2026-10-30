@@ -210,10 +210,11 @@ function generateSchedule(syllabus, profile) {
 ### 6.1 File: lib/localTimetableStorage.ts
 
 Responsibilities:
-- create and update timetable records
+- create records only after an explicit save and update saved records as plan progress changes
 - store timetable metadata and full data in IndexedDB
 - keep a lightweight localStorage metadata index for fast listing
 - expose API methods like saveTimetableLocally(), getStoredTimetablesList(), getStoredTimetable()
+- generated schedules and PDF exports do not enter Saved plans unless the user chooses Save plan
 
 ### 6.2 Stored object shape
 

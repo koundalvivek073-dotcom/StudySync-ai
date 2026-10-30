@@ -11,6 +11,7 @@ interface AppStore {
   profile: AvailabilityProfile | null;
   schedule: ScheduleBlock[];
   warning: string | null;
+  activeTimetableId: string | null;
 
   // UI state
   currentStep: number; // 0=landing 1=upload 2=questionnaire 3=dashboard
@@ -20,6 +21,7 @@ interface AppStore {
   setSyllabus: (s: ParsedSyllabus) => void;
   setProfile: (p: AvailabilityProfile) => void;
   setSchedule: (blocks: ScheduleBlock[], warning: string | null) => void;
+  setActiveTimetableId: (id: string | null) => void;
   setStep: (n: number) => void;
   setGenerating: (b: boolean) => void;
 
@@ -41,6 +43,7 @@ export const useAppStore = create<AppStore>()(
       profile: null,
       schedule: [],
       warning: null,
+      activeTimetableId: null,
       currentStep: 0,
       isGenerating: false,
 
@@ -56,6 +59,7 @@ export const useAppStore = create<AppStore>()(
         const { syllabus } = get();
         if (syllabus) saveSchedule(schedule, syllabus.id);
       },
+      setActiveTimetableId: (activeTimetableId) => set({ activeTimetableId }),
       setStep: (currentStep) => set({ currentStep }),
       setGenerating: (isGenerating) => set({ isGenerating }),
 
@@ -174,6 +178,7 @@ export const useAppStore = create<AppStore>()(
           profile: null,
           schedule: [],
           warning: null,
+          activeTimetableId: null,
           currentStep: 0,
           isGenerating: false,
         }),
@@ -185,6 +190,7 @@ export const useAppStore = create<AppStore>()(
         profile: state.profile,
         schedule: state.schedule,
         warning: state.warning,
+        activeTimetableId: state.activeTimetableId,
       }),
     },
   ),

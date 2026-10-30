@@ -3,7 +3,6 @@
 import jsPDF from 'jspdf';
 import { ParsedSyllabus, AvailabilityProfile, ScheduleBlock } from './types';
 import { format, parseISO } from 'date-fns';
-import { saveTimetableLocally } from './localTimetableStorage';
 
 export interface PDFExportOptions {
   syllabus: ParsedSyllabus;
@@ -450,20 +449,13 @@ export function generatePDFData(opts: PDFExportOptions): { dataUri: string; blob
   return { dataUri, blob, filename };
 }
 
-// ─── Main Export Function (Save locally on device + Download file) ────────────
+// ─── Main Export Function (Download file) ─────────────────────────────────────
 
 export async function exportToPDF(opts: PDFExportOptions): Promise<PDFExportResult> {
   try {
     const { dataUri, blob, filename } = generatePDFData(opts);
 
-    // 1. Store locally on user device immediately
-    try {
-      await saveTimetableLocally(opts.syllabus, opts.profile, opts.blocks, dataUri);
-    } catch (saveErr) {
-      console.warn('[PDF] Failed to store locally during export:', saveErr);
-    }
-
-    // 2. Trigger download
+    // Trigger download
     try {
       // Primary download approach using Blob object URL
       const blobUrl = URL.createObjectURL(blob);

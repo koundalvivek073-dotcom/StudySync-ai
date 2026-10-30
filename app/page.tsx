@@ -38,7 +38,7 @@ function formatPlanDate(value: string) {
 
 export default function HomePage() {
   const router = useRouter();
-  const { setSyllabus, setProfile, setSchedule } = useAppStore();
+  const { setSyllabus, setProfile, setSchedule, setActiveTimetableId } = useAppStore();
   const [savedModalOpen, setSavedModalOpen] = useState(false);
   const [savedPlans, setSavedPlans] = useState<StoredTimetableMeta[]>([]);
   const [activePlan, setActivePlan] = useState<StoredTimetable | null>(null);
@@ -100,6 +100,7 @@ export default function HomePage() {
 
     setSyllabus(item.syllabus);
     setProfile(item.profile);
+    setActiveTimetableId(item.id);
     setSchedule(item.blocks, null);
     router.push('/dashboard');
   };

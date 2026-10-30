@@ -26,7 +26,7 @@ import {
   Sparkles, Calendar, ChevronLeft, ChevronRight, Download,
   AlertTriangle, Clock, BookOpen, Heart, RotateCcw, Sun, Moon,
   Coffee, CheckCircle2, XCircle, HelpCircle, RefreshCw, X,
-  BarChart2, Menu, Eye, HardDrive, FileText, Check, History,
+  BarChart2, Menu, Eye, HardDrive, FileText, Check, History, Save,
 } from 'lucide-react';
 
 type ViewMode = 'day' | 'week' | 'month';
@@ -553,7 +553,10 @@ function HealthSidebar({ profile, result, schedule }: { profile: any; result: an
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { syllabus, profile, schedule, warning, setSyllabus, setProfile, setSchedule, markBlock, reshufflePending } = useAppStore();
+  const {
+    syllabus, profile, schedule, warning, activeTimetableId,
+    setSyllabus, setProfile, setSchedule, setActiveTimetableId, markBlock, reshufflePending,
+  } = useAppStore();
   const [view, setView] = useState<ViewMode>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [exporting, setExporting] = useState(false);
@@ -564,8 +567,8 @@ export default function DashboardPage() {
   const [pdfDataUri, setPdfDataUri] = useState<string | null>(null);
   const [savedModalOpen, setSavedModalOpen] = useState(false);
   const [savedCount, setSavedCount] = useState(0);
-  const [activeTimetableId, setActiveTimetableId] = useState<string | undefined>(undefined);
   const [exportToast, setExportToast] = useState<string | null>(null);
+  const [savingPlan, setSavingPlan] = useState(false);
   const dashboardRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
@@ -579,11 +582,14 @@ export default function DashboardPage() {
     const updateSavedInfo = async () => {
       const list = await getStoredTimetablesList();
       setSavedCount(list.length);
+      if (activeTimetableId && !list.some((item) => item.id === activeTimetableId)) {
+        setActiveTimetableId(null);
+      }
     };
     updateSavedInfo();
     window.addEventListener('studysync_timetables_changed', updateSavedInfo);
     return () => window.removeEventListener('studysync_timetables_changed', updateSavedInfo);
-  }, []);
+  }, [activeTimetableId, setActiveTimetableId]);
 
   // Demo mode or restore from device storage if active store is empty
   useEffect(() => {
@@ -620,13 +626,9 @@ export default function DashboardPage() {
         const result = generateSchedule(demoSyllabus, demoProfile);
         setSyllabus(demoSyllabus);
         setProfile(demoProfile);
+        setActiveTimetableId(null);
         setSchedule(result.blocks, result.warning);
 
-        // Store demo locally so user has immediate offline access
-        try {
-          const stored = await saveTimetableLocally(demoSyllabus, demoProfile, result.blocks);
-          setActiveTimetableId(stored.id);
-        } catch {}
       })();
     }
   }, []);
@@ -652,7 +654,7 @@ export default function DashboardPage() {
       const result = await exportToPDF({ syllabus, profile, blocks: schedule });
       if (result.success) {
         setPdfDataUri(result.dataUri);
-        setExportToast('✅ PDF exported and stored locally on your device!');
+        setExportToast('PDF downloaded. Save the plan separately if you want to keep it here.');
         setTimeout(() => setExportToast(null), 4000);
       } else {
         setExportToast(`⚠️ Export error: ${result.error || 'Failed to download'}`);
@@ -695,11 +697,29 @@ export default function DashboardPage() {
     if (item) {
       setSyllabus(item.syllabus);
       setProfile(item.profile);
-      setSchedule(item.blocks, null);
       setActiveTimetableId(item.id);
+      setSchedule(item.blocks, null);
       if (item.pdfDataUri) setPdfDataUri(item.pdfDataUri);
       setExportToast(`Loaded "${item.title}"`);
       setTimeout(() => setExportToast(null), 3000);
+    }
+  };
+
+  const handleSavePlan = async () => {
+    if (!syllabus || !profile || activeTimetableId) return;
+
+    setSavingPlan(true);
+    try {
+      const stored = await saveTimetableLocally(syllabus, profile, schedule, pdfDataUri ?? undefined);
+      setActiveTimetableId(stored.id);
+      setExportToast('Plan saved to your saved plans on this device.');
+      setTimeout(() => setExportToast(null), 3000);
+    } catch (err) {
+      console.error('Plan save error:', err);
+      setExportToast('Could not save this plan. Please try again.');
+      setTimeout(() => setExportToast(null), 4000);
+    } finally {
+      setSavingPlan(false);
     }
   };
 
@@ -742,7 +762,7 @@ export default function DashboardPage() {
   } : null;
 
   return (
-    <main className="relative min-h-screen overflow-hidden">
+    <main className="relative flex h-dvh flex-col overflow-hidden">
       {/* Block Status Modal */}
       {selectedBlock && (
         <BlockModal
@@ -774,7 +794,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Nav */}
-      <nav className="flex items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-[rgba(255,255,255,0.06)] bg-[#0d0d1a]">
+      <nav className="sticky top-0 z-40 flex shrink-0 items-center justify-between px-3 sm:px-6 py-3 sm:py-4 border-b border-[rgba(255,255,255,0.06)] bg-[#0d0d1a]/95 backdrop-blur-xl">
         <Link href="/" className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-500 to-accent flex items-center justify-center flex-shrink-0">
             <Sparkles className="w-4 h-4 text-white" />
@@ -783,6 +803,19 @@ export default function DashboardPage() {
         </Link>
 
         <div className="flex items-center gap-1.5 sm:gap-2">
+          <button
+            onClick={handleSavePlan}
+            disabled={!syllabus || !profile || savingPlan || Boolean(activeTimetableId)}
+            className="btn btn-primary px-2 sm:px-3 text-xs sm:text-sm flex items-center gap-1.5 disabled:cursor-default disabled:opacity-70"
+            aria-label={savingPlan ? 'Saving plan' : activeTimetableId ? 'Plan saved' : 'Save plan'}
+            title={activeTimetableId ? 'This plan is saved on this device' : 'Save this plan to your saved plans'}
+          >
+            {activeTimetableId
+              ? <Check className="w-4 h-4 flex-shrink-0" />
+              : <Save className="w-4 h-4 flex-shrink-0" />}
+            <span className="hidden sm:inline">{savingPlan ? 'Saving…' : activeTimetableId ? 'Saved' : 'Save plan'}</span>
+          </button>
+
           {/* Reshuffle pending button — icon-only on mobile */}
           {pendingCount > 0 && (
             <button
@@ -876,7 +909,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="flex h-[calc(100vh-57px)] sm:h-[calc(100vh-65px)]">
+      <div className="flex min-h-0 flex-1">
         {/* Sidebar — desktop only */}
         <aside className="w-56 flex-shrink-0 border-r border-[rgba(255,255,255,0.06)] p-4 overflow-y-auto bg-[#0d0d1a] hidden lg:block">
           <HealthSidebar
@@ -887,7 +920,7 @@ export default function DashboardPage() {
         </aside>
 
         {/* Main calendar */}
-        <div className="flex-1 flex flex-col overflow-hidden dashboard-content-area">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden dashboard-content-area">
           {/* Warning banner */}
           {warning && (
             <div className="warning-banner mx-3 sm:mx-4 mt-2 sm:mt-3 flex items-start gap-2 text-xs sm:text-sm">
@@ -1019,7 +1052,7 @@ export default function DashboardPage() {
           setPdfDataUri(dataUri);
           setPdfModalOpen(true);
         }}
-        currentActiveId={activeTimetableId}
+        currentActiveId={activeTimetableId ?? undefined}
       />
     </main>
   );

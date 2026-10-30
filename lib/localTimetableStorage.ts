@@ -149,6 +149,7 @@ export async function saveTimetableLocally(
       localStorage.setItem(`studysync_tt_${id}`, JSON.stringify(fallbackCopy));
     } catch (lsErr) {
       console.error('[Storage] localStorage backup failed:', lsErr);
+      throw lsErr;
     }
   }
 

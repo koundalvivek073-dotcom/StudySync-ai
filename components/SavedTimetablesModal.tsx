@@ -126,7 +126,7 @@ export default function SavedTimetablesModal({
                 </span>
               </h2>
               <p className="text-xs text-[#888baa]">
-                All timetables created on this device are saved here • Access & view PDF offline anytime
+                New plans are added here only when you choose Save plan.
               </p>
             </div>
           </div>
@@ -152,7 +152,7 @@ export default function SavedTimetablesModal({
               <BookOpen className="w-10 h-10 mx-auto mb-3 text-indigo-400/60" />
               <h3 className="text-sm font-semibold text-white mb-1">No Timetables Stored Yet</h3>
               <p className="text-xs text-[#888baa] max-w-md mx-auto mb-4">
-                Whenever you create a timetable or export a PDF, StudySync AI automatically stores it locally on your device so you can access it anytime right inside the app.
+                Generate a timetable, then choose Save plan to keep it here for later.
               </p>
             </div>
           ) : (
@@ -255,7 +255,7 @@ export default function SavedTimetablesModal({
         <div className="px-4 sm:px-6 py-3 border-t border-indigo-500/20 bg-[#141428] flex items-center justify-between text-xs text-[#888baa]">
           <div className="flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Encrypted in local browser storage</span>
+            <span>Stored in this browser on this device</span>
           </div>
           <button
             onClick={onClose}
