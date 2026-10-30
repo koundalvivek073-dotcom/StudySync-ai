@@ -56,6 +56,17 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+### Open the app on another device
+
+To use this local server from a phone or another computer:
+
+1. Connect both devices to the same Wi-Fi or local network.
+2. On the computer running StudySync, run `ipconfig` and note its IPv4 address.
+3. On the other device, open `http://<computer-ip>:3000` (for example, `http://192.168.1.25:3000`). Do not use `localhost` there; it refers to the other device itself.
+4. If the page cannot connect, allow Node.js through Windows Defender Firewall on **Private networks** and retry. Keep the server on a trusted local network.
+
+The API uses the same host and port as the page, so opening the app at that address also sends API requests to the computer running the server. You can check connectivity by opening `http://<computer-ip>:3000/api/db/syllabus` on the other device; a JSON response means the API is reachable.
+
 ## Deploy to Vercel
 
 1. [Import the GitHub repository into Vercel](https://vercel.com/new).
