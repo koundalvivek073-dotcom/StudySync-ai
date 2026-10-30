@@ -74,7 +74,7 @@ STRICT PEDAGOGICAL & EXTRACTION RULES:
 
 import { normalizeToParsedSyllabus } from '@/lib/syllabusParser';
 
-// ─── Gemini AI Parser ──────────────────────────────────────────────────────────
+// ─── Meta Model API Parser ─────────────────────────────────────────────────────
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -83,9 +83,9 @@ function normalizeTopicLabel(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-function validateDetailedGeminiSyllabus(raw: unknown): void {
+function validateDetailedMetaSyllabus(raw: unknown): void {
   if (!isRecord(raw) || !Array.isArray(raw.subjects) || raw.subjects.length === 0) {
-    throw new Error('Gemini did not return a subject-and-chapter outline.');
+    throw new Error('Meta did not return a subject-and-chapter outline.');
   }
 
   let chapterCount = 0;
@@ -109,24 +109,22 @@ function validateDetailedGeminiSyllabus(raw: unknown): void {
 
       if (detailedTopics.length < 3) {
         throw new Error(
-          `Gemini returned fewer than three specific subtopics for "${chapterName || 'a chapter'}".`,
+          `Meta returned fewer than three specific subtopics for "${chapterName || 'a chapter'}".`,
         );
       }
     }
   }
 
   if (chapterCount === 0) {
-    throw new Error('Gemini could not identify any chapters in the syllabus.');
+    throw new Error('Meta could not identify any chapters in the syllabus.');
   }
 }
 
-async function parseWithGemini(
+async function parseWithMeta(
   apiKey: string,
-  payload: { mimeType?: string; base64Data?: string; text?: string },
+  payload: { mimeType?: string; base64Data?: string; fileName?: string; text?: string },
   titleHint?: string,
 ): Promise<ParsedSyllabus> {
-  const contents: any[] = [];
-
   // Only classify text-only input as chapter names. A PDF with few extracted lines
   // is still a document and must be analyzed from its attached pages.
   const inputText = payload.text || titleHint || '';
@@ -158,107 +156,133 @@ ${inputText || titleHint || 'General Studies'}`;
       ? chapterListPrompt
       : `${textInstructions}\n\nDocument Content:\n${payload.text || ''}`;
 
-  const parts: any[] = [{ text: userPromptText }];
+  const userContent: Array<Record<string, unknown>> = [
+    { type: 'text', text: userPromptText },
+  ];
 
   if (payload.base64Data && payload.mimeType) {
-    parts.push({
-      inlineData: {
-        mimeType: payload.mimeType,
-        data: payload.base64Data,
-      },
-    });
-  }
-
-  contents.push({ parts });
-
-  const modelsToTry = payload.base64Data
-    ? [
-        'gemini-3.5-flash-lite',
-        'gemini-3.8-flash',
-        'gemini-3.7-flash',
-        'gemini-3.6-flash',
-        'gemini-3.5-flash',
-        'gemini-flash-lite-latest',
-        'gemini-flash-latest',
-        'gemini-pro-latest',
-      ]
-    : [
-        'gemini-3.8-flash',
-        'gemini-3.7-flash',
-        'gemini-3.6-flash',
-        'gemini-3.5-flash',
-        'gemini-3.5-flash-lite',
-        'gemini-flash-latest',
-        'gemini-flash-lite-latest',
-        'gemini-pro-latest',
-      ];
-
-  const deadline = Date.now() + 55000;
-  let lastError = '';
-  for (const modelId of modelsToTry) {
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 1000) break;
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), Math.min(20000, remainingMs - 500));
-
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
+    const dataUrl = `data:${payload.mimeType};base64,${payload.base64Data}`;
+    if (payload.mimeType === 'application/pdf') {
+      userContent.push({
+        type: 'file',
+        file: {
+          filename: payload.fileName || 'syllabus.pdf',
+          file_data: dataUrl,
         },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: SYSTEM_INSTRUCTION }],
-          },
-          contents,
-          generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.2,
-          },
-        }),
-        signal: controller.signal,
       });
-    } catch (fetchErr: any) {
-      lastError = `${modelId} network error: ${fetchErr?.message || fetchErr}`;
-      console.warn(`Gemini request failed for ${modelId}:`, lastError);
-      if (!controller.signal.aborted) break;
-      continue;
-    } finally {
-      clearTimeout(timeout);
+    } else {
+      userContent.push({
+        type: 'image_url',
+        image_url: { url: dataUrl },
+      });
     }
-
-    if (res.ok) {
-      try {
-        const json = await res.json();
-        const rawResponseText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!rawResponseText) throw new Error('Gemini returned an empty response.');
-
-        const cleaned = rawResponseText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-        const parsed = JSON.parse(cleaned);
-
-        validateDetailedGeminiSyllabus(parsed);
-        return normalizeToParsedSyllabus(parsed, titleHint, 'gemini-ai');
-      } catch (err) {
-        lastError = `${modelId} returned an unusable syllabus: ${err instanceof Error ? err.message : String(err)}`;
-        console.warn('Gemini returned an insufficient syllabus:', lastError);
-        continue;
-      }
-    }
-
-    const errText = await res.text();
-    lastError = `${modelId} (${res.status}): ${errText}`;
-    console.warn(`Gemini model ${modelId} failed:`, errText.slice(0, 200));
-    const quotaOrRateLimitError =
-      res.status === 403 && /quota|resource_exhausted|rate.?limit/i.test(errText);
-    if (![400, 404, 429, 500, 502, 503].includes(res.status) && !quotaOrRateLimitError) break;
   }
 
-  throw new Error(`All Gemini models failed. Last error: ${lastError}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 55000);
+  let res: Response;
+  try {
+    res = await fetch('https://api.meta.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'muse-spark-1.3',
+        messages: [
+          { role: 'system', content: SYSTEM_INSTRUCTION },
+          { role: 'user', content: userContent },
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'parsed_syllabus',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string' },
+                parseConfidence: { type: 'number' },
+                subjects: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      subjectName: { type: 'string' },
+                      chapters: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            chapterName: { type: 'string' },
+                            topics: {
+                              type: 'array',
+                              items: {
+                                type: 'object',
+                                properties: {
+                                  topicName: { type: 'string' },
+                                  difficulty: { type: 'string', enum: ['easy', 'medium', 'hard'] },
+                                  estimatedHours: { type: 'number' },
+                                  prerequisites: {
+                                    type: 'array',
+                                    items: { type: 'string' },
+                                  },
+                                },
+                                required: ['topicName', 'difficulty', 'estimatedHours', 'prerequisites'],
+                                additionalProperties: false,
+                              },
+                            },
+                          },
+                          required: ['chapterName', 'topics'],
+                          additionalProperties: false,
+                        },
+                      },
+                    },
+                    required: ['subjectName', 'chapters'],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ['title', 'parseConfidence', 'subjects'],
+              additionalProperties: false,
+            },
+          },
+        },
+        temperature: 0.2,
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Meta Model API request timed out. Please retry.');
+    }
+    throw new Error(
+      `Meta Model API network error: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.warn(`Meta Model API request failed (${res.status}):`, errText.slice(0, 200));
+    if (res.status === 429 || /quota|rate.?limit/i.test(errText)) {
+      throw new Error(`Meta Model API rate or usage limit reached (${res.status}).`);
+    }
+    throw new Error(`Meta Model API request failed (${res.status}).`);
+  }
+
+  const json = await res.json();
+  const rawResponseText = json?.choices?.[0]?.message?.content;
+  if (typeof rawResponseText !== 'string' || !rawResponseText.trim()) {
+    throw new Error('Meta Model API returned an empty response.');
+  }
+
+  const cleaned = rawResponseText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const parsed = JSON.parse(cleaned);
+  validateDetailedMetaSyllabus(parsed);
+  return normalizeToParsedSyllabus(parsed, titleHint, 'meta-ai');
 }
 
 // ─── OpenAI Parser ────────────────────────────────────────────────────────────
@@ -321,13 +345,11 @@ async function parseWithOpenAI(
 export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get('content-type') || '';
-    const geminiKey =
-      req.headers.get('x-gemini-api-key') || process.env.GEMINI_API_KEY;
+    const metaKey = process.env.META_MODEL_API_KEY || process.env.MODEL_API_KEY;
     const openaiKey =
       req.headers.get('x-openai-api-key') || process.env.OPENAI_API_KEY;
-    let geminiFailure = '';
 
-    let payload: { mimeType?: string; base64Data?: string; text?: string; title?: string } = {};
+    let payload: { mimeType?: string; base64Data?: string; fileName?: string; text?: string; title?: string } = {};
 
     if (contentType.includes('application/json')) {
       const body = await req.json();
@@ -359,23 +381,31 @@ export async function POST(req: NextRequest) {
         const buffer = await file.arrayBuffer();
         const nodeBuffer = Buffer.from(buffer);
         const base64Data = nodeBuffer.toString('base64');
-        payload = { mimeType, base64Data, title };
+        payload = { mimeType, base64Data, fileName: file.name, title };
 
       }
     } else {
       return NextResponse.json({ error: 'Unsupported Content-Type' }, { status: 400 });
     }
 
-    // 1. Try Gemini AI if key is present
-    if (geminiKey) {
+    if (!metaKey && !openaiKey) {
+      return NextResponse.json(
+        { error: 'Meta Model API is not configured. Set META_MODEL_API_KEY in .env.local or your deployment environment.' },
+        { status: 503 },
+      );
+    }
+
+    // 1. Try Meta Model API
+    let metaFailure = '';
+    if (metaKey) {
       try {
-        const result = await parseWithGemini(geminiKey, payload, payload.title);
+        const result = await parseWithMeta(metaKey, payload, payload.title);
         if (result && result.items && result.items.length > 0) {
           return NextResponse.json(result);
         }
       } catch (err: any) {
-        geminiFailure = err instanceof Error ? err.message : String(err);
-        console.warn('Gemini parsing failed, attempting fallbacks:', err.message);
+        metaFailure = err instanceof Error ? err.message : String(err);
+        console.warn('Meta syllabus parsing failed, attempting fallbacks:', err instanceof Error ? err.message : err);
       }
     }
 
@@ -391,24 +421,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const geminiQuotaReached = /429|quota|RESOURCE_EXHAUSTED|rate.?limit/i.test(geminiFailure);
-    if (geminiQuotaReached && !payload.base64Data) {
+    const providerQuotaReached = /429|quota|rate.?limit/i.test(metaFailure);
+    if (providerQuotaReached) {
       return NextResponse.json(
-        { error: 'Gemini has reached its API quota across the available models. Check your Google AI Studio quota, then retry.' },
+        { error: 'Meta Model API has reached its rate or usage limit. Check your Meta Model API account, then retry.' },
         { status: 429 },
       );
     }
 
     if (payload.base64Data) {
-      const error = geminiQuotaReached
-        ? 'Gemini has reached its API quota across the available models. Check your Google AI Studio quota, then retry this document.'
-        : /503|UNAVAILABLE/i.test(geminiFailure)
-          ? 'Gemini is temporarily busy. Please retry this document in a moment.'
-          : /fewer than three|did not return|could not identify|unusable syllabus/i.test(geminiFailure)
-            ? 'Gemini could not produce enough specific study topics for every chapter. No vague fallback was used; please retry or paste readable syllabus text.'
-          : 'AI could not reliably read this document. Please retry, or paste the syllabus text instead.';
       return NextResponse.json(
-        { error },
+        { error: 'Meta Model API could not reliably read this document. Please retry, or paste the syllabus text instead.' },
         { status: 502 },
       );
     }

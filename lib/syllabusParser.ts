@@ -542,12 +542,6 @@ export function parseWithMock(index = 0): Promise<ParsedSyllabus> {
   });
 }
 
-/** Helper to get stored key */
-function getClientGeminiKey(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('studysync_gemini_api_key') || null;
-}
-
 /** Parse a real file via the API route with automatic smart fallback. */
 export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
   const fileName = file.name.replace(/\.[^/.]+$/, '');
@@ -564,20 +558,20 @@ export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
     formData.append('file', file);
     formData.append('title', fileName);
 
-    const geminiKey = getClientGeminiKey();
-    const headers: Record<string, string> = {};
-    if (geminiKey) {
-      headers['x-gemini-api-key'] = geminiKey;
-    }
-
     const res = await fetch('/api/parse-syllabus', {
       method: 'POST',
-      headers,
       body: formData,
     });
 
     if (!res.ok) {
       const data = await res.json().catch(() => null);
+      if (res.status === 503) {
+        throw new Error(
+          typeof data?.error === 'string'
+            ? data.error
+            : 'Meta Model API is not configured. Set META_MODEL_API_KEY in the server environment.',
+        );
+      }
       throw new Error(
         typeof data?.error === 'string'
           ? data.error
@@ -597,7 +591,7 @@ export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
     throw new Error('The syllabus analyzer returned no study topics. Please try again.');
   } catch (err) {
     console.warn('API parsing encountered issue, engaging smart curriculum engine:', err);
-    if (isDocumentUpload) {
+    if (isDocumentUpload || (err instanceof Error && /MODEL_API_KEY/.test(err.message))) {
       throw err instanceof Error
         ? err
         : new Error('Could not analyze the document. Please try again or paste its syllabus text.');
@@ -611,15 +605,9 @@ export async function parseWithAPI(file: File): Promise<ParsedSyllabus> {
 /** Parse raw text or chapter names with AI, using the local parser for non-quota failures. */
 export async function parseTextWithAPI(text: string, title = 'Pasted Syllabus'): Promise<ParsedSyllabus> {
   try {
-    const geminiKey = getClientGeminiKey();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (geminiKey) {
-      headers['x-gemini-api-key'] = geminiKey;
-    }
-
     const res = await fetch('/api/parse-syllabus', {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, title }),
     });
 
@@ -628,7 +616,7 @@ export async function parseTextWithAPI(text: string, title = 'Pasted Syllabus'):
       const message = typeof data?.error === 'string'
         ? data.error
         : `Syllabus analysis failed (${res.status}).`;
-      if (res.status === 429 || /quota|RESOURCE_EXHAUSTED|rate.?limit/i.test(message)) {
+      if (res.status === 503 || res.status === 429 || /quota|rate.?limit/i.test(message)) {
         throw new Error(message);
       }
       console.warn('Text API parsing failed; parsing entered text locally:', message);
@@ -643,7 +631,7 @@ export async function parseTextWithAPI(text: string, title = 'Pasted Syllabus'):
       }
     }
   } catch (err) {
-    if (err instanceof Error && /quota|RESOURCE_EXHAUSTED|rate.?limit/i.test(err.message)) {
+    if (err instanceof Error && /MODEL_API_KEY|quota|rate.?limit/i.test(err.message)) {
       throw err;
     }
     console.warn('Text API parsing encountered an issue; parsing entered text locally:', err);

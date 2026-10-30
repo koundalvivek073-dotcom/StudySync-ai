@@ -125,7 +125,7 @@ interface ScheduleBlock {
 Main responsibilities:
 - accept uploaded file or text input
 - determine if the input is document-based or bare chapter text
-- call Gemini parser or local parser fallback
+- call Meta Model API parser or local parser fallback
 - validate output structure
 - normalize into ParsedSyllabus
 
@@ -295,7 +295,7 @@ This keeps key app data shared between upload, questionnaire, and dashboard page
 ### Input validation errors
 - uploaded file fails parse validation
 - syllabus structure is empty or malformed
-- Gemini returns insufficient topics
+- Meta Model API returns insufficient topics
 
 Handling:
 - raise clear user-facing error messages

@@ -65,7 +65,7 @@ The AI parsing route lives at:
 
 - app/api/parse-syllabus/route.ts
 
-This route validates user inputs, calls Gemini-backed parsing logic, and normalizes the result into the domain model used across the app.
+This route validates user inputs, calls the Meta Model API, and normalizes the result into the domain model used across the app.
 
 ### 4.3 Core domain and scheduling logic
 
@@ -95,7 +95,7 @@ This keeps the app useful even in serverless or browser-only deployments.
 
 1. User uploads syllabus PDF or image.
 2. Client sends request to parse API.
-3. Server validates input and passes to Gemini or local parsing logic.
+3. Server validates input and passes it to Meta Model API or local parsing logic.
 4. Parser returns structured subject/chapter/topic data.
 5. Application normalizes output into ParsedSyllabus.
 6. User reviews parsed syllabus and continues.

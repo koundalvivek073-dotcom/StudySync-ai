@@ -41,11 +41,11 @@ npm ci
 Create a `.env.local` file in the project root:
 
 ```env
-GEMINI_API_KEY=your-gemini-api-key
+META_MODEL_API_KEY=your-meta-model-api-key
 NEXT_PUBLIC_USE_MOCK_AI=false
 ```
 
-Get a Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey). Keep it private; never add a `NEXT_PUBLIC_` prefix.
+Create a key in the [Meta Model API dashboard](https://dev.meta.ai/). Keep it private: configure it only in the server environment, and never add a `NEXT_PUBLIC_` prefix.
 
 Start the development server:
 
@@ -59,7 +59,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 1. [Import the GitHub repository into Vercel](https://vercel.com/new).
 2. Keep the project root at the repository root; Vercel detects Next.js automatically.
-3. Add `GEMINI_API_KEY` and `NEXT_PUBLIC_USE_MOCK_AI=false` under **Project Settings → Environment Variables**.
+3. Add `META_MODEL_API_KEY` and `NEXT_PUBLIC_USE_MOCK_AI=false` under **Project Settings → Environment Variables**.
 4. Deploy or redeploy the project.
 
 The syllabus analysis route allows up to 60 seconds for AI document processing. In serverless deployments, SQLite is disabled because function storage is temporary. Syllabi and schedules are kept in the browser and do not sync between devices.
@@ -68,7 +68,7 @@ The syllabus analysis route allows up to 60 seconds for AI document processing. 
 
 - **Next.js 16** · **React 19** · **TypeScript**
 - **Tailwind CSS v4** · **Zustand**
-- **Gemini API** for syllabus analysis
+- **Meta Model API (Muse Spark 1.3)** for syllabus analysis
 - **better-sqlite3** for local development
 - **jsPDF** and **html2canvas** for PDF export
 
