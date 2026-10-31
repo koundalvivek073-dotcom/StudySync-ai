@@ -24,6 +24,7 @@ import { addDays, format, isValid, startOfWeek } from 'date-fns';
 import { useAppStore } from '@/store/appStore';
 import SavedTimetablesModal from '@/components/SavedTimetablesModal';
 import InAppPdfModal from '@/components/InAppPdfModal';
+import DataRain from '@/components/ui/data-rain';
 import {
   getStoredTimetablesList,
   getStoredTimetable,
@@ -78,7 +79,31 @@ export default function HomePage() {
     return () => window.removeEventListener('studysync_timetables_changed', refreshSavedPlans);
   }, [refreshSavedPlans]);
 
+  const [isReverseNavigating, setIsReverseNavigating] = useState(false);
+
   useEffect(() => {
+    let scrollAccumulator = 0;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Trigger return to /hero when scrolling UP at top of page
+      if (window.scrollY === 0 && e.deltaY < 0) {
+        scrollAccumulator += Math.abs(e.deltaY);
+        if (scrollAccumulator > 120 && !isReverseNavigating) {
+          setIsReverseNavigating(true);
+          setTimeout(() => {
+            router.push("/hero?reverse=1");
+          }, 180);
+        }
+      } else {
+        scrollAccumulator = 0;
+      }
+    };
+
+    window.addEventListener("wheel", handleWheel);
+    return () => window.removeEventListener("wheel", handleWheel);
+  }, [router, isReverseNavigating]);
+
+useEffect(() => {
     if (!timerRunning) return;
 
     const interval = window.setInterval(() => {
@@ -167,8 +192,15 @@ export default function HomePage() {
   };
 
   return (
-    <main className="workspace-app">
-      <aside className="workspace-sidebar">
+    <main className="workspace-app relative isolate">
+      <DataRain
+        fullscreen={true}
+        className="-z-10 pointer-events-none opacity-40"
+        count={1500}
+        flowSpeed={0.9}
+        palette={{ calm: "#a3e635", mid: "#22e6ff", hot: "#ff3d9a" }}
+      />
+      <aside className="workspace-sidebar relative z-20">
         <Link href="/" className="workspace-brand" aria-label="StudySync overview">
           <span className="workspace-brand-mark"><Sparkles size={17} aria-hidden="true" /></span>
           <span>StudySync</span>
@@ -200,7 +232,7 @@ export default function HomePage() {
         </div>
       </aside>
 
-      <div className="workspace-main">
+      <div className="workspace-main relative z-10">
         <header className="workspace-topbar">
           <div className="workspace-breadcrumb">
             <span>Workspace</span>
@@ -537,6 +569,15 @@ export default function HomePage() {
         pdfDataUri={pdfDataUri}
         title={pdfTitle}
       />
+      {isReverseNavigating && (
+        <div className="fixed inset-0 z-50 pointer-events-none bg-[#0B0F17] transition-opacity duration-200 opacity-90 flex items-center justify-center">
+          <div className="text-center animate-pulse">
+            <span className="text-xs font-mono tracking-widest uppercase text-[#A3E635]">
+              Reversing to Hero...
+            </span>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
