@@ -18,7 +18,6 @@ interface UploadBentoProps {
   currentMaterial: React.ReactNode;
   guide: React.ReactNode;
   formats: React.ReactNode;
-  extractor: React.ReactNode;
 }
 
 const SAMPLE_COLORS = [
@@ -35,7 +34,6 @@ export function UploadBento({
   currentMaterial,
   guide,
   formats,
-  extractor,
 }: UploadBentoProps) {
   const [order, setOrder] = React.useState(() => samples.map((sample) => sample.id));
   const frontId = order[order.length - 1];
@@ -121,9 +119,6 @@ export function UploadBento({
         {formats}
       </Tile>
 
-      <Tile className="upload-bento-extractor">
-        {extractor}
-      </Tile>
     </div>
   );
 }

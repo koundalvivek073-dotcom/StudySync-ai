@@ -92,6 +92,13 @@ export default function UploadPage() {
     localStorage.removeItem('studysync_gemini_api_key');
   }, []);
 
+  const resetParseResult = () => {
+    if (parseState === 'parsing') return;
+    setParseState('idle');
+    setResult(null);
+    setError(null);
+  };
+
   const onDrop = useCallback((accepted: File[]) => {
     if (accepted.length > 0) {
       setFile(accepted[0]);
@@ -122,9 +129,7 @@ export default function UploadPage() {
   });
 
   const handleParse = async () => {
-    if (inputMode === 'file' && !file) return;
-    if (inputMode === 'paste' && !pastedText.trim()) return;
-    if (inputMode === 'chapters' && !chapterInput.trim()) return;
+    if (!hasActiveMaterial || parseState === 'parsing') return;
 
     setParseState('parsing');
     setParseStep(0);
@@ -194,6 +199,11 @@ export default function UploadPage() {
     : file?.name.endsWith('.txt') || file?.name.endsWith('.md')
     ? <Edit3 className="w-7 h-7 sm:w-8 sm:h-8 text-primary-400" />
     : <ImageIcon className="w-7 h-7 sm:w-8 sm:h-8 text-primary-400" />;
+  const hasActiveMaterial = inputMode === 'file'
+    ? file !== null
+    : inputMode === 'chapters'
+    ? Boolean(chapterInput.trim())
+    : Boolean(pastedText.trim());
   const activeText = inputMode === 'chapters' ? chapterInput : pastedText;
   const activeLineCount = activeText.split(/\r?\n/).filter((line) => line.trim()).length;
 
@@ -278,59 +288,6 @@ export default function UploadPage() {
             </>
           }
           formats={<UploadFormatSummary />}
-          extractor={
-            <div className="upload-bento-extractor-content">
-              <p className="upload-bento-extractor-step">STEP 01 / 03 · TOPIC ORGANIZER</p>
-              <h2>Auto-Parse</h2>
-              <p className="upload-bento-extractor-description">
-                Organize chapters, estimate difficulty, and prepare topics for your study plan.
-              </p>
-              {parseState === 'parsing' ? (
-                <div className="upload-bento-progress" role="status" aria-live="polite">
-                  <div className="upload-bento-progress-heading">
-                    <Loader2 size={17} className="animate-spin" aria-hidden="true" />
-                    <span>Organizing your material</span>
-                  </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{ width: `${((parseStep + 1) / PARSE_STEPS.length) * 100}%` }} />
-                  </div>
-                  <p>{PARSE_STEPS[parseStep]}</p>
-                </div>
-              ) : (
-                <div className="upload-bento-next-step">
-                  <strong>{parseState === 'done' ? 'Topics are ready' : 'Next step'}</strong>
-                  <p>
-                    {parseState === 'done'
-                      ? 'Review the organized topics, then continue to your weekly routine.'
-                      : 'Add course material to generate a topic list and estimated study hours.'}
-                  </p>
-                </div>
-              )}
-              {(parseState === 'idle' || parseState === 'error') && (
-                <LiquidButton
-                  type="button"
-                  size="xl"
-                  onClick={handleParse}
-                  disabled={
-                    inputMode === 'file' ? !file
-                    : inputMode === 'chapters' ? !chapterInput.trim()
-                    : !pastedText.trim()
-                  }
-                  className="upload-bento-extractor-action isolate mt-auto w-full overflow-hidden rounded-2xl border border-white/20 bg-white/[0.06] text-white shadow-[0_8px_32px_rgba(0,0,0,0.18)] backdrop-blur-xl hover:border-white/30 hover:bg-white/[0.12] focus-visible:ring-[#A3E635]"
-                >
-                  <Sparkles aria-hidden="true" />
-                  {parseState === 'error'
-                    ? 'Try again'
-                    : inputMode === 'chapters'
-                    ? 'Build my topic list'
-                    : inputMode === 'paste'
-                    ? 'Organize my notes'
-                    : 'Find my syllabus topics'}
-                  <ChevronRight aria-hidden="true" />
-                </LiquidButton>
-              )}
-            </div>
-          }
         >
           <div className="upload-bento-main-heading">
             <div className="upload-page-heading !mb-0">
@@ -464,7 +421,7 @@ export default function UploadPage() {
                 disabled={parseState === 'parsing'}
                 placeholder="e.g. Higher Mathematics, JavaScript Mastery, Physics 101"
                 value={customTitle}
-                onChange={(e) => setCustomTitle(e.target.value)}
+                onChange={(e) => { setCustomTitle(e.target.value); resetParseResult(); }}
                 className="w-full bg-[#161824] border border-[#2a2d42] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-[#555870] focus:outline-none focus:border-primary-500"
               />
             </div>
@@ -481,7 +438,7 @@ export default function UploadPage() {
                 disabled={parseState === 'parsing'}
                 placeholder="Paste your chapters, topics, bullet points, or lecture notes here..."
                 value={pastedText}
-                onChange={(e) => setPastedText(e.target.value)}
+                onChange={(e) => { setPastedText(e.target.value); resetParseResult(); }}
                 className="w-full bg-[#161824] border border-[#2a2d42] rounded-lg p-3.5 text-sm text-white font-mono placeholder-[#555870] focus:outline-none focus:border-primary-500 resize-y"
               />
             </div>
@@ -515,7 +472,7 @@ export default function UploadPage() {
                 disabled={parseState === 'parsing'}
                 placeholder="e.g. Class 12 Physics & Chemistry, JEE Mains 2025, UPSC GS Paper 1"
                 value={customTitle}
-                onChange={(e) => setCustomTitle(e.target.value)}
+                onChange={(e) => { setCustomTitle(e.target.value); resetParseResult(); }}
                 className="w-full bg-[#161824] border border-[#2a2d42] rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-[#555870] focus:outline-none focus:border-accent/60"
               />
             </div>
@@ -531,6 +488,7 @@ export default function UploadPage() {
                     onClick={() => {
                       setChapterInput(SAMPLE_CHAPTER_INPUT);
                       setCustomTitle('Class 12 — Physics & Chemistry');
+                      resetParseResult();
                     }}
                     className="text-xs text-accent hover:text-purple-300 transition-colors"
                   >
@@ -541,6 +499,7 @@ export default function UploadPage() {
                     onClick={() => {
                       setChapterInput(SAMPLE_CBSE_10);
                       setCustomTitle('Class 10 Mathematics');
+                      resetParseResult();
                     }}
                     className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
                   >
@@ -563,13 +522,47 @@ Class 12 Chemistry
 - Electrochemistry
 - Coordination Compounds`}
                 value={chapterInput}
-                onChange={(e) => setChapterInput(e.target.value)}
+                onChange={(e) => { setChapterInput(e.target.value); resetParseResult(); }}
                 className="w-full bg-[#161824] border border-accent/30 rounded-lg p-3.5 text-sm text-white font-mono placeholder-[#555870] focus:outline-none focus:border-accent/70 resize-y"
               />
             </div>
             <p className="text-xs text-[#888baa]">
               Add the course or exam name too, so chapter topics can be expanded in the right context.
             </p>
+          </div>
+        )}
+
+        {(parseState === 'idle' || parseState === 'error') && (
+          <div className="upload-syllabus-action">
+            <LiquidButton
+              type="button"
+              size="xl"
+              onClick={handleParse}
+              disabled={!hasActiveMaterial}
+              className="upload-syllabus-button isolate w-full overflow-hidden rounded-full border border-white/20 bg-white/[0.06] text-white shadow-[0_8px_32px_rgba(0,0,0,0.18)] backdrop-blur-xl hover:border-white/30 hover:bg-white/[0.12] focus-visible:ring-[#A3E635]"
+            >
+              <Sparkles aria-hidden="true" />
+              {parseState === 'error'
+                ? 'Try again'
+                : inputMode === 'chapters'
+                ? 'Build my topic list'
+                : inputMode === 'paste'
+                ? 'Organize my notes'
+                : 'Find my syllabus topics'}
+              <ChevronRight aria-hidden="true" />
+            </LiquidButton>
+          </div>
+        )}
+        {parseState === 'parsing' && (
+          <div className="upload-parse-progress" role="status" aria-live="polite">
+            <div className="upload-parse-progress-heading">
+              <Loader2 size={17} className="animate-spin" aria-hidden="true" />
+              <span>Organizing your material</span>
+            </div>
+            <div className="progress-track">
+              <div className="progress-fill" style={{ width: `${((parseStep + 1) / PARSE_STEPS.length) * 100}%` }} />
+            </div>
+            <p>{PARSE_STEPS[parseStep]}</p>
           </div>
         )}
 
