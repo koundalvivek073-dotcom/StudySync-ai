@@ -214,7 +214,7 @@ export default function HeroPage() {
             <LiquidButton
               asChild
               size="xl"
-              className="rounded-full border border-white/20 bg-white/10 px-7 text-white backdrop-blur-xl hover:bg-white/20 focus-visible:ring-[#A3E635]"
+              className="isolate overflow-hidden rounded-full border border-white/20 bg-white/[0.06] px-7 text-white shadow-[0_8px_32px_rgba(0,0,0,0.18)] backdrop-blur-xl hover:border-white/30 hover:bg-white/[0.12] focus-visible:ring-[#A3E635]"
             >
               <Link href="/upload">
                 Create a study plan
