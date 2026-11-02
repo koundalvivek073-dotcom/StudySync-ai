@@ -1,6 +1,17 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@theme inline {
+  --color-background: var(--color-bg);
+  --color-foreground: var(--color-text);
+  --color-card: var(--color-surface);
+  --color-card-foreground: var(--color-text);
+  --color-muted: var(--color-surface-2);
+  --color-muted-foreground: var(--color-muted);
+  --color-border: rgba(99, 102, 241, 0.18);
+  --color-ring: var(--color-primary);
+}
+
 /* ─── CSS Custom Properties ────────────────────────────────────────────────── */
 :root {
   --dr-bg-0: #020308;
@@ -1639,15 +1650,6 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 .upload-file-remove { display: inline-flex; min-height: 40px; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid rgba(226, 229, 222, 0.13); border-radius: 6px; background: transparent; color: #c2c5bc; cursor: pointer; font: inherit; font-size: 10px; }
 .upload-file-remove:hover { border-color: rgba(240, 133, 133, 0.4); color: #f0a3a3; }
 
-.upload-samples { margin-top: 16px; border-bottom: 1px solid rgba(226, 229, 222, 0.1); }
-.upload-samples summary { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; color: #9fa399; cursor: pointer; font-size: 10px; list-style: none; }
-.upload-samples summary::-webkit-details-marker { display: none; }
-.upload-samples summary > span:last-child { display: inline-flex; align-items: center; gap: 5px; color: var(--home-lime, #c5ee83); }
-.upload-samples[open] summary > span:last-child svg { transform: rotate(90deg); }
-.upload-sample-options { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 0 14px; }
-.upload-sample-button { display: inline-flex; min-height: 37px; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid rgba(226, 229, 222, 0.13); border-radius: 6px; background: rgba(255, 255, 255, 0.025); color: #d3d5cc; cursor: pointer; font: inherit; font-size: 10px; transition: background 160ms ease, border-color 160ms ease; }
-.upload-sample-button:hover { border-color: rgba(197, 238, 131, 0.32); background: rgba(197, 238, 131, 0.07); }
-
 .upload-submit {
   display: inline-flex;
   width: 100%;
@@ -2343,33 +2345,69 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   color: #eff0e9;
 }
 
-.upload-page-heading { margin: 0 0 24px; }
+.upload-page-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin: 0; }
 .upload-page-heading .workspace-overline span { color: #697266; }
 .upload-page-heading h1 {
   margin: 0;
   color: #f0f1e9;
-  font-size: clamp(26px, 3.2vw, 36px);
-  font-weight: 570;
-  letter-spacing: -0.055em;
-  line-height: 1.12;
+  font-size: clamp(30px, 3.2vw, 38px);
+  font-weight: 620;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
 }
+.upload-page-heading h1 span { color: var(--home-lime, #a3e635); }
 .upload-page-heading > div > p:last-child {
-  max-width: 610px;
+  max-width: 570px;
   margin: 10px 0 0;
   color: #a1a79b;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.65;
+}
+
+.upload-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, auto);
+  align-items: stretch;
+  gap: 12px;
+}
+.upload-bento-main { grid-column: 1 / span 2; grid-row: 1 / span 2; }
+.upload-bento-samples { grid-column: 3; grid-row: 1; min-height: 275px; }
+.upload-bento-guide { grid-column: 4; grid-row: 1; }
+.upload-bento-status { grid-column: 3; grid-row: 2; }
+.upload-bento-formats { grid-column: 3; grid-row: 3; }
+.upload-bento-extractor {
+  grid-column: 4;
+  grid-row: 2 / span 2;
+  border-color: transparent !important;
+  background: var(--home-lime, #a3e635) !important;
+  color: #19220e !important;
+}
+.upload-bento-extractor :where(h2, p, strong) { color: inherit; }
+.upload-bento-main-heading { display: grid; gap: 18px; margin-bottom: 24px; }
+.upload-bento-main .upload-page-heading .workspace-overline { margin-bottom: 8px; }
+.upload-bento-step-count {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: #d3d8cd;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
 }
 
 .upload-stepper {
   display: flex;
+  width: 100%;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
-  padding: 12px 15px;
-  border: 1px solid rgba(226, 229, 222, 0.09);
-  border-radius: 8px;
-  background: rgba(15, 18, 17, 0.65);
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .upload-step { display: flex; min-width: 0; align-items: center; gap: 8px; color: #747c71; }
@@ -2391,17 +2429,57 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 .upload-step-current > strong { color: #dce9cc; }
 .upload-step-connector { height: 1px; min-width: 14px; flex: 1; background: rgba(226, 229, 222, 0.12); }
 
-.upload-app-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(245px, 0.34fr);
-  align-items: start;
-  gap: 14px;
+.upload-app .upload-workspace {
+  padding: clamp(18px, 2.2vw, 24px);
+  border-color: var(--color-border);
+  border-radius: 26px;
+  background: var(--color-card);
+  box-shadow: none;
 }
-
-.upload-app .upload-workspace { padding: clamp(19px, 2.5vw, 28px); }
+.upload-app .upload-bento-main {
+  position: relative;
+  isolation: isolate;
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 1px 0 0 rgba(255, 255, 255, 0.09),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 0 18px rgba(255, 255, 255, 0.035);
+}
+.upload-app .upload-bento-main::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+}
+.upload-app .upload-workspace.upload-bento-main {
+  background: transparent !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.upload-app .upload-bento-main > * {
+  position: relative;
+  z-index: 1;
+}
+.upload-app .upload-bento-main :where(input, textarea) {
+  background-color: rgba(8, 10, 20, 0.5) !important;
+}
+.upload-app .upload-bento-main .upload-mode {
+  background: rgba(255, 255, 255, 0.045);
+}
+.upload-app .upload-bento-main .upload-mode-active {
+  background: rgba(197, 238, 131, 0.12);
+}
+.upload-app .upload-bento-main .upload-dropzone {
+  background-color: rgba(255, 255, 255, 0.025);
+}
 .upload-app .upload-workspace-heading { margin-bottom: 17px; }
 .upload-app .upload-workspace-heading h2 { font-size: 20px; }
-.upload-app .upload-workspace-index { font-size: 9px; }
+.upload-app .upload-workspace-heading p { font-size: 10px; }
+.upload-app .upload-workspace-index { font-size: 10px; }
 
 .upload-app .upload-mode-switch {
   gap: 7px;
@@ -2412,69 +2490,94 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 }
 
 .upload-app .upload-mode {
-  min-height: 62px;
+  min-height: 68px;
   justify-content: flex-start;
   gap: 9px;
-  padding: 9px 10px;
-  border-color: rgba(226, 229, 222, 0.12);
-  background: rgba(255, 255, 255, 0.018);
+  padding: 10px 12px;
+  border-color: rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
   text-align: left;
 }
 
 .upload-app .upload-mode > svg { flex: 0 0 auto; color: #9ba493; }
 .upload-app .upload-mode > span { display: grid; min-width: 0; gap: 4px; }
-.upload-app .upload-mode strong { color: #d8dcd1; font-size: 10px; font-weight: 620; }
-.upload-app .upload-mode small { color: #858d81; font-size: 8px; line-height: 1.35; }
-.upload-app .upload-mode:hover:not(:disabled) { border-color: rgba(197, 238, 131, 0.32); background: rgba(255, 255, 255, 0.035); }
+.upload-app .upload-mode strong { color: #d8dcd1; font-size: 12px; font-weight: 620; }
+.upload-app .upload-mode small { color: #a4a8b8; font-size: 10px; line-height: 1.35; }
+.upload-app .upload-mode:hover:not(:disabled) { border-color: rgba(197, 238, 131, 0.32); background: rgba(255, 255, 255, 0.07); }
 .upload-app .upload-mode-active > svg,
 .upload-app .upload-mode-active strong { color: #d9efbd; }
 .upload-app .upload-mode-active small { color: #a8bb91; }
+.upload-app .upload-mode-active { border-color: rgba(197, 238, 131, 0.35); background: rgba(197, 238, 131, 0.08); }
 .upload-app .upload-mode:disabled { cursor: wait; opacity: 0.65; }
 
 .upload-app .upload-dropzone { min-height: 232px; }
 .upload-app .upload-dropzone-has-file { min-height: 132px; }
-.upload-app .upload-workspace .card { border-radius: 8px; }
+.upload-app .upload-workspace .card {
+  border-color: rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.035);
+}
 .upload-app .upload-workspace textarea { line-height: 1.65; }
 
-.upload-source-summary {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-  margin-top: 15px;
-  padding: 10px 11px;
-  border: 1px solid rgba(226, 229, 222, 0.09);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.02);
-}
+.upload-builder-content { padding-bottom: 48px; }
 
-.upload-source-icon {
+.upload-bento-sample-stage { position: relative; min-height: 200px; margin: 4px -5px 0; }
+.upload-bento-sample-card {
+  position: absolute;
+  left: 50%;
   display: grid;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 7px;
-  background: rgba(197, 238, 131, 0.09);
-  color: #c5ee83;
+  width: calc(100% - 24px);
+  min-height: 128px;
+  align-content: start;
+  gap: 8px;
+  padding: 14px;
+  border: 0;
+  border-radius: 14px;
+  text-align: left;
+  transform-origin: top center;
+  transition: top 400ms cubic-bezier(0.22, 1, 0.36, 1), transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
 }
+.upload-bento-sample-card strong { font-size: 14px; font-weight: 750; line-height: 1.25; }
+.upload-bento-sample-card > span:last-child { font-size: 10px; opacity: 0.78; }
+.upload-bento-sample-label { font-size: 8px; font-weight: 750; letter-spacing: 0.1em; opacity: 0.72; }
+.upload-bento-sample-behind { cursor: pointer; }
+.upload-bento-sample-behind:hover { filter: brightness(1.05); }
+.upload-bento-sample-footer { position: relative; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px -4px -4px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+.upload-bento-sample-footer > span { color: var(--color-muted); font-size: 9px; line-height: 1.4; }
+.upload-bento-sample-footer button { flex: 0 0 auto; min-height: 34px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--color-text); color: var(--color-bg); cursor: pointer; font: inherit; font-size: 9px; font-weight: 700; }
+.upload-bento-sample-footer button:disabled { cursor: wait; opacity: 0.6; }
+.upload-bento-muted { color: var(--color-muted); font-size: 12px; }
 
-.upload-source-copy { display: grid; min-width: 0; gap: 3px; }
-.upload-source-copy small { color: #858d81; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; }
-.upload-source-copy strong { overflow: hidden; color: #dce1d5; font-size: 10px; font-weight: 570; text-overflow: ellipsis; white-space: nowrap; }
-.upload-source-detail { margin-left: auto; color: #899184; font-size: 9px; white-space: nowrap; }
+.upload-bento-status-content { display: flex; min-width: 0; align-items: center; gap: 10px; }
+.upload-bento-status-icon { display: grid; width: 38px; height: 38px; flex: 0 0 auto; place-items: center; border-radius: 11px; background: rgba(163, 230, 53, 0.1); color: #a3e635; }
+.upload-bento-status-title { display: block; overflow: hidden; color: #e6e9e1; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.upload-bento-status-detail { margin: 5px 0 0; color: #a0a5b7; font-size: 9px; line-height: 1.45; }
 
-.upload-guide-panel {
-  position: sticky;
-  top: 88px;
-  min-width: 0;
-  padding: 19px;
-  border: 1px solid rgba(226, 229, 222, 0.1);
-  border-radius: 9px;
-  background:
-    radial-gradient(ellipse at 100% 0, rgba(197, 238, 131, 0.075), transparent 55%),
-    linear-gradient(145deg, rgba(19, 23, 21, 0.94), rgba(13, 16, 15, 0.93));
-}
+.upload-bento-format-content { display: grid; gap: 12px; }
+.upload-bento-format-intro { display: flex; align-items: center; gap: 8px; color: #cbd1c4; }
+.upload-bento-format-intro svg { flex: 0 0 auto; color: #a3e635; }
+.upload-bento-format-intro p { margin: 0; font-size: 10px; line-height: 1.4; }
+.upload-bento-format-content ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.upload-bento-format-content li { display: flex; align-items: center; gap: 7px; color: #c0c5ba; font-size: 9px; }
+.upload-bento-format-content li svg { flex: 0 0 auto; color: #a3e635; }
+.upload-bento-format-limit { display: flex; align-items: center; gap: 6px; margin: 0; color: #9298a8; font-size: 9px; }
+.upload-bento-format-limit svg { color: #a3e635; }
+
+.upload-bento-extractor-content { display: flex; min-height: 100%; flex-direction: column; }
+.upload-bento-extractor-step { margin: 0; font-size: 10px; font-weight: 650; opacity: 0.7; }
+.upload-bento-extractor-content h2 { margin: 22px 0 0; font-family: var(--font-mono, monospace); font-size: clamp(26px, 2.6vw, 34px); font-weight: 750; letter-spacing: -0.06em; line-height: 1; }
+.upload-bento-extractor-description { margin: 8px 0 0; font-size: 11px; font-weight: 550; line-height: 1.5; opacity: 0.82; }
+.upload-bento-next-step { margin-top: 20px; padding: 12px; border-radius: 14px; background: rgba(25, 34, 14, 0.09); font-size: 10px; }
+.upload-bento-next-step strong { font-weight: 700; }
+.upload-bento-next-step p { margin: 5px 0 0; font-size: 10px; line-height: 1.5; opacity: 0.78; }
+.upload-bento-progress { margin-top: 20px; padding: 12px; border-radius: 14px; background: rgba(25, 34, 14, 0.09); }
+.upload-bento-progress-heading { display: flex; align-items: center; gap: 8px; font-size: 10px; font-weight: 700; }
+.upload-bento-progress .progress-track { height: 5px; margin-top: 12px; background: rgba(25, 34, 14, 0.18); }
+.upload-bento-progress .progress-fill { background: #19220e; }
+.upload-bento-progress > p { margin: 8px 0 0; font-size: 9px; line-height: 1.45; opacity: 0.78; }
+.upload-bento-extractor .upload-bento-extractor-action { border-color: #19220e; background: #19220e; color: #d9f99d; }
+.upload-bento-extractor .upload-bento-extractor-action:hover { background: #263519; }
 
 .upload-guide-intro { display: grid; justify-items: start; }
 .upload-guide-icon {
@@ -2489,38 +2592,24 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   color: #c5ee83;
 }
 .upload-guide-intro .workspace-overline { margin-bottom: 7px; font-size: 8px; }
-.upload-guide-intro h2 { margin: 0; color: #e8ebe1; font-size: 17px; font-weight: 570; letter-spacing: -0.04em; line-height: 1.28; }
-.upload-guide-intro > p:last-child { margin: 9px 0 0; color: #9da497; font-size: 10px; line-height: 1.65; }
+.upload-guide-intro h4 { margin: 0; color: #e8ebe1; font-size: 15px; font-weight: 650; letter-spacing: -0.04em; line-height: 1.28; }
+.upload-guide-intro > p:last-child { margin: 9px 0 0; color: #a6aabb; font-size: 11px; line-height: 1.6; }
 .upload-guide-divider { height: 1px; margin: 17px 0; background: rgba(226, 229, 222, 0.1); }
-.upload-guide-label { margin: 0 0 11px; color: #848c80; font-size: 8px; font-weight: 720; letter-spacing: 0.12em; }
+.upload-guide-label { margin: 0 0 11px; color: #9298a8; font-size: 9px; font-weight: 720; letter-spacing: 0.12em; }
 .upload-guide-list { display: grid; gap: 11px; margin: 0; padding: 0; list-style: none; }
-.upload-guide-list li { display: flex; align-items: flex-start; gap: 8px; color: #b6bdb0; font-size: 9px; line-height: 1.5; }
+.upload-guide-list li { display: flex; align-items: flex-start; gap: 8px; color: #c2c5d1; font-size: 10px; line-height: 1.5; }
 .upload-guide-list svg { flex: 0 0 auto; margin-top: 1px; color: #a9cc81; }
-
-.upload-guide-formats {
-  margin-top: 17px;
-  padding: 11px;
-  border: 1px solid rgba(226, 229, 222, 0.08);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.018);
-}
-.upload-guide-formats > span { color: #848c80; font-size: 8px; font-weight: 700; letter-spacing: 0.1em; }
-.upload-guide-formats p { margin: 7px 0 4px; color: #c6ccc0; font-size: 9px; font-weight: 600; letter-spacing: 0.03em; }
-.upload-guide-formats small { color: #858d81; font-size: 8px; }
 
 .upload-guide-next {
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  margin-top: 17px;
-  padding: 11px;
-  border: 1px solid rgba(197, 238, 131, 0.13);
-  border-radius: 7px;
-  background: rgba(197, 238, 131, 0.045);
+  margin-top: auto;
+  padding-top: 16px;
 }
-.upload-guide-next > span { color: #b9df88; font-size: 9px; font-variant-numeric: tabular-nums; }
-.upload-guide-next strong { color: #dce8ce; font-size: 9px; font-weight: 620; }
-.upload-guide-next p { margin: 5px 0 0; color: #929b8b; font-size: 8px; line-height: 1.55; }
+.upload-guide-next > span { display: grid; width: 26px; height: 26px; flex: 0 0 auto; place-items: center; border-radius: 50%; background: rgba(163, 230, 53, 0.1); color: #b8ee7c; font-size: 9px; font-variant-numeric: tabular-nums; }
+.upload-guide-next strong { color: #e1e4eb; font-size: 10px; font-weight: 620; }
+.upload-guide-next p { margin: 5px 0 0; color: #a6aabb; font-size: 9px; line-height: 1.55; }
 
 .upload-app :where(a, button, summary, input, textarea):focus-visible {
   outline: 2px solid #c5ee83;
@@ -2529,22 +2618,40 @@ html, body { overflow-x: hidden; max-width: 100vw; }
 
 .upload-mobile-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
-@media (max-width: 1000px) {
-  .upload-app-grid { grid-template-columns: minmax(0, 1fr) minmax(220px, 0.42fr); gap: 12px; }
-  .upload-app .upload-workspace { padding: 19px; }
+@media (prefers-reduced-motion: reduce) {
+  .upload-bento-sample-card { transition: none; }
+}
+
+@media (max-width: 1100px) {
+  .upload-bento-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .upload-bento-main { grid-column: 1 / -1; grid-row: auto; }
+  .upload-bento-samples { grid-column: 1; grid-row: auto; }
+  .upload-bento-guide { grid-column: 2; grid-row: auto; }
+  .upload-bento-status { grid-column: 1; grid-row: auto; }
+  .upload-bento-formats { grid-column: 2; grid-row: auto; }
+  .upload-bento-extractor { grid-column: 1 / -1; grid-row: auto; }
+  .upload-bento-extractor-content { min-height: 270px; }
 }
 
 @media (max-width: 760px) {
   .upload-app-content { padding: 28px 20px calc(88px + env(safe-area-inset-bottom)); }
-  .upload-page-heading { margin-bottom: 19px; }
-  .upload-page-heading h1 { font-size: clamp(25px, 6vw, 32px); }
-  .upload-page-heading > div > p:last-child { max-width: 560px; font-size: 11px; }
-  .upload-stepper { gap: 8px; margin-bottom: 14px; padding: 10px; }
+  .upload-page-heading { flex-direction: column; gap: 12px; }
+  .upload-page-heading h1 { font-size: clamp(28px, 7vw, 36px); }
+  .upload-page-heading > div > p:last-child { max-width: 560px; font-size: 12px; }
+  .upload-stepper { gap: 8px; }
   .upload-step { gap: 6px; }
   .upload-step > strong { font-size: 9px; }
   .upload-step > span { width: 22px; height: 22px; }
-  .upload-app-grid { grid-template-columns: 1fr; }
-  .upload-guide-panel { position: static; }
+  .upload-bento-grid { grid-template-columns: minmax(0, 1fr); }
+  .upload-bento-main,
+  .upload-bento-samples,
+  .upload-bento-guide,
+  .upload-bento-status,
+  .upload-bento-formats,
+  .upload-bento-extractor { grid-column: 1; grid-row: auto; }
+  .upload-bento-main-heading { gap: 14px; }
+  .upload-bento-extractor-content { min-height: 0; }
+  .upload-guide-next { margin-top: 17px; }
 }
 
 @media (max-width: 420px) {
@@ -2555,10 +2662,10 @@ html, body { overflow-x: hidden; max-width: 100vw; }
   .upload-app .upload-mode { min-height: 64px; flex-direction: column; align-items: flex-start; gap: 5px; padding: 8px 7px; }
   .upload-app .upload-mode > svg { width: 15px; height: 15px; }
   .upload-app .upload-mode > span { gap: 2px; }
-  .upload-app .upload-mode strong { font-size: 9px; }
-  .upload-app .upload-mode small { font-size: 7px; }
+  .upload-app .upload-mode strong { font-size: 10px; }
+  .upload-app .upload-mode small { font-size: 9px; }
   .upload-app .upload-dropzone { min-height: 224px; padding: 16px 10px; }
-  .upload-page-heading > div > p:last-child { font-size: 10px; }
+  .upload-page-heading > div > p:last-child { font-size: 11px; }
   .upload-stepper { gap: 5px; padding: 9px 8px; }
   .upload-step > strong { font-size: 8px; }
   .upload-step > span { width: 20px; height: 20px; font-size: 8px; }
