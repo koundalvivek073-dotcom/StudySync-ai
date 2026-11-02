@@ -215,7 +215,9 @@ export function normalizeToParsedSyllabus(raw: any, titleHint?: string, source =
   }
 
   const finalTitle = raw?.title || titleHint || (items[0]?.subject ? `${items[0].subject} Syllabus` : 'Analyzed Syllabus');
-  const confidence = Math.min(0.98, Math.max(0.7, typeof raw?.parseConfidence === 'number' ? raw.parseConfidence : 0.92));
+  const confidence = typeof raw?.parseConfidence === 'number' && Number.isFinite(raw.parseConfidence)
+    ? Math.min(0.98, Math.max(0.7, raw.parseConfidence))
+    : undefined;
 
   return {
     id: raw?.id || `syllabus_${Date.now()}`,
@@ -224,7 +226,7 @@ export function normalizeToParsedSyllabus(raw: any, titleHint?: string, source =
     subjects: subjects.length > 0 ? subjects : undefined,
     items,
     totalHours: Math.round(calculatedHours * 10) / 10,
-    parseConfidence: confidence,
+    ...(confidence === undefined ? {} : { parseConfidence: confidence }),
   };
 }
 

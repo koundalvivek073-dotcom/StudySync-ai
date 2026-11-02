@@ -74,7 +74,7 @@ export interface ParsedSyllabus {
   subjects?: SubjectItem[];
   items: SyllabusItem[];
   totalHours: number;
-  parseConfidence: number; // 0–1
+  parseConfidence?: number; // 0–1, only supplied when a parser can estimate it
 }
 
 // ─── Availability Profile ────────────────────────────────────────────────────

@@ -511,6 +511,5 @@ export function generateSmartCurriculum(rawTitle?: string): ParsedSyllabus {
     subjects,
     items,
     totalHours: Math.round(calculatedHours * 10) / 10,
-    parseConfidence: 0.94,
   };
 }

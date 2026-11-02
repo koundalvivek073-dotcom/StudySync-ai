@@ -16,7 +16,9 @@ import {
   TunnelCard,
   useCameraParallax,
 } from '@/components/ui/perspective-tunnel-hero';
-import { Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+import { LiquidButton } from '@/components/ui/liquid-glass-button';
 
 interface StageDimensions {
   width: number;
@@ -208,7 +210,18 @@ export default function HeroPage() {
             </span>
           }
           description="Transform your syllabus PDFs and screenshots into personalized, intelligent study schedules automatically."
-          actions={undefined}
+          actions={
+            <LiquidButton
+              asChild
+              size="xl"
+              className="rounded-full border border-white/20 bg-white/10 px-7 text-white backdrop-blur-xl hover:bg-white/20 focus-visible:ring-[#A3E635]"
+            >
+              <Link href="/upload">
+                Create a study plan
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </LiquidButton>
+          }
           scrollHint={false}
         />
       </div>
@@ -233,7 +246,7 @@ export default function HeroPage() {
       {/* Subtle Scroll Hint Indicator (No Buttons) */}
       <motion.div
         style={{ opacity: hintOpacity }}
-        className="pointer-events-none absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 text-xs font-mono uppercase tracking-[0.3em] text-slate-400"
+        className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 text-xs font-mono uppercase tracking-[0.3em] text-slate-400"
       >
         <span>{isRewinding ? 'Rewinding Tunnel...' : 'Scroll down to explore'}</span>
         <div className="h-6 w-px bg-gradient-to-b from-[#A3E635] to-transparent animate-pulse" />

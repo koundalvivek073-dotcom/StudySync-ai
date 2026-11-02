@@ -18,6 +18,7 @@ import { addDays, format } from 'date-fns';
 import {
   AvailabilityProfile,
   BlockType,
+  DayOfWeek,
   Difficulty,
   ParsedSyllabus,
   ScheduleBlock,
@@ -41,6 +42,9 @@ const fromMin = (m: number): string => {
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
+const WEEK_DAYS: DayOfWeek[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+const getDayOfWeek = (date: Date): DayOfWeek => WEEK_DAYS[date.getDay()];
 
 // ─── Block Builder ────────────────────────────────────────────────────────────
 
@@ -86,7 +90,7 @@ const BLOCK_COLORS: Record<BlockType, string> = {
   free: 'transparent',
 };
 
-function buildBlockedMap(profile: AvailabilityProfile): MinuteEntry[] {
+function buildBlockedMap(profile: AvailabilityProfile, day?: DayOfWeek): MinuteEntry[] {
   const map: MinuteEntry[] = Array.from({ length: 1440 }, () => ({
     type: 'free' as BlockType,
     label: '',
@@ -127,6 +131,7 @@ function buildBlockedMap(profile: AvailabilityProfile): MinuteEntry[] {
 
   // Fixed commitments + transition buffer
   profile.fixedCommitments.forEach((slot) => {
+    if (day && slot.days && !slot.days.includes(day)) return;
     const s = toMin(slot.start);
     const e = toMin(slot.end);
     block(s, e, 'commitment', slot.label ?? '📌 Commitment');
@@ -253,18 +258,22 @@ export function generateSchedule(
   const breakCost = profile.breakBetweenSessions;
 
   // Calculate canonical net study time per day for analytics
-  const canonicalMap = buildBlockedMap(profile);
-  const canonicalWindows = findContiguousFreeWindows(canonicalMap);
   let netMinPerDay = 0;
-  for (const w of canonicalWindows) {
-    netMinPerDay += w.durationMin;
+  for (const day of WEEK_DAYS) {
+    const canonicalWindows = findContiguousFreeWindows(buildBlockedMap(profile, day));
+    for (const w of canonicalWindows) {
+      netMinPerDay += w.durationMin;
+    }
   }
+  netMinPerDay /= WEEK_DAYS.length;
 
   for (let dayOffset = 0; dayOffset < profile.horizonDays; dayOffset++) {
-    const date = format(addDays(today, dayOffset), 'yyyy-MM-dd');
+    const currentDate = addDays(today, dayOffset);
+    const date = format(currentDate, 'yyyy-MM-dd');
+    const day = getDayOfWeek(currentDate);
 
     // 1. Add fixed blocks for this day
-    const dayMap = buildBlockedMap(profile);
+    const dayMap = buildBlockedMap(profile, day);
 
     // Sleep
     const bedMin = toMin(profile.bedtime);
@@ -290,6 +299,7 @@ export function generateSchedule(
 
     // Commitments + buffer
     profile.fixedCommitments.forEach((slot) => {
+      if (slot.days && !slot.days.includes(day)) return;
       const dur = toMin(slot.end) - toMin(slot.start);
       blocks.push(makeBlock(date, toMin(slot.start), dur, 'commitment', slot.label ?? '📌 Commitment', BLOCK_COLORS.commitment));
       if (profile.transitionBuffer > 0) {

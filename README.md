@@ -56,6 +56,14 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Run focused tests
+
+Run the scheduler regression tests for weekday commitments and parser confidence:
+
+```bash
+npm run test:scheduler
+```
+
 ### Open the app on another device
 
 To use this local server from a phone or another computer:

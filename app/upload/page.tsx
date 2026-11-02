@@ -602,7 +602,9 @@ Class 12 Chemistry
                   <span className="badge badge-secondary text-xs">Sample / Demo Data</span>
                 ) : result.source === 'meta-ai' || result.source === 'openai' ? (
                   <span className="badge badge-primary text-xs">
-                    {(result.parseConfidence * 100).toFixed(0)}% AI confidence
+                    {result.parseConfidence === undefined
+                      ? 'AI analyzed'
+                      : `${(result.parseConfidence * 100).toFixed(0)}% AI confidence`}
                   </span>
                 ) : (
                   <span className="badge badge-secondary text-xs">Fallback estimates</span>
@@ -613,13 +615,38 @@ Class 12 Chemistry
                     : result.source === 'openai'
                     ? '🤖 OpenAI'
                     : result.source === 'smart-engine'
-                    ? '⚡ Curriculum AI'
+                    ? '⚡ Title-based estimate'
                     : result.source === 'local-parser'
                     ? '⚡ Structural Engine'
                     : 'Demo'}
                 </span>
               </div>
             </div>
+
+            {result.source === 'smart-engine' && (
+              <div
+                role="status"
+                className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100"
+              >
+                <strong className="block">Estimated curriculum — not extracted from your material.</strong>
+                <p className="mt-1 text-amber-100/80">
+                  AI analysis wasn&apos;t available, so these topics were generated from the course title.
+                  Review them before building your schedule.
+                </p>
+              </div>
+            )}
+
+            {result.source === 'local-parser' && (
+              <div
+                role="status"
+                className="mb-4 rounded-xl border border-sky-400/30 bg-sky-400/10 p-4 text-sm text-sky-100"
+              >
+                <strong className="block">Structured locally from your text.</strong>
+                <p className="mt-1 text-sky-100/80">
+                  Review the detected topics and estimated study hours before building your schedule.
+                </p>
+              </div>
+            )}
 
             <div className="card p-4 sm:p-5 mb-4">
               <h2 className="font-bold text-base sm:text-lg mb-1">{result.title}</h2>
