@@ -8,7 +8,6 @@ import {
   FileText,
   Image as ImageIcon,
   CheckCircle,
-  Heart,
   Loader2,
   Sparkles,
   AlertTriangle,
@@ -16,13 +15,15 @@ import {
   X,
   Edit3,
   Info,
-  LayoutDashboard,
-  CalendarDays,
+  ArrowLeft,
 } from 'lucide-react';
 import { useAppStore } from '@/store/appStore';
 import { parseSyllabus, parseTextWithAPI } from '@/lib/syllabusParser';
 import { ParsedSyllabus } from '@/lib/types';
 import Link from 'next/link';
+import DataRain from '@/components/ui/data-rain';
+import { LiquidButton } from '@/components/ui/liquid-glass-button';
+import { UploadBento, UploadFormatSummary } from '@/components/ui/upload-bento';
 
 type ParseState = 'idle' | 'parsing' | 'done' | 'error';
 type InputMode = 'file' | 'paste' | 'chapters';
@@ -65,6 +66,12 @@ const SAMPLE_CBSE_10 = `Class 10 Mathematics
 - Quadratic Equations
 - Arithmetic Progressions
 - Triangles`;
+
+const UPLOAD_SAMPLE_PRESETS = [
+  { id: 'cs-engineering', title: 'CS Engineering Sem 5', detail: 'Software engineering curriculum', index: 0 },
+  { id: 'upsc-gs', title: 'UPSC General Studies', detail: 'Competitive exam preparation', index: 1 },
+  { id: 'biology-class-12', title: 'Biology Class 12 (CBSE)', detail: 'NCERT curriculum', index: 2 },
+];
 
 export default function UploadPage() {
   const router = useRouter();
@@ -157,6 +164,31 @@ export default function UploadPage() {
     router.push('/questionnaire');
   };
 
+  const handleLoadSample = async (id: string) => {
+    const sample = UPLOAD_SAMPLE_PRESETS.find((preset) => preset.id === id);
+    if (!sample) {
+      setError('That sample preset is no longer available. Choose another preset.');
+      setParseState('error');
+      return;
+    }
+
+    setParseState('parsing');
+    setParseStep(0);
+    setError(null);
+    setResult(null);
+    setFile(null);
+    try {
+      const { parseWithMock } = await import('@/lib/syllabusParser');
+      const parsed = await parseWithMock(sample.index);
+      setResult(parsed);
+      setCustomTitle(parsed.title);
+      setParseState('done');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load the sample syllabus.');
+      setParseState('error');
+    }
+  };
+
   const fileIcon = file?.type === 'application/pdf'
     ? <FileText className="w-7 h-7 sm:w-8 sm:h-8 text-primary-400" />
     : file?.name.endsWith('.txt') || file?.name.endsWith('.md')
@@ -166,78 +198,163 @@ export default function UploadPage() {
   const activeLineCount = activeText.split(/\r?\n/).filter((line) => line.trim()).length;
 
   return (
-    <main className="workspace-app upload-app">
-      <aside className="workspace-sidebar">
-        <Link href="/" className="workspace-brand" aria-label="StudySync overview">
-          <span className="workspace-brand-mark"><Sparkles size={17} aria-hidden="true" /></span>
-          <span>StudySync</span>
-        </Link>
-        <p className="workspace-nav-label">WORKSPACE</p>
-        <nav className="workspace-nav" aria-label="Workspace navigation">
-          <Link href="/" className="workspace-nav-item">
-            <LayoutDashboard size={18} aria-hidden="true" />
-            <span>Overview</span>
+    <main className="upload-app relative isolate min-h-screen overflow-x-clip bg-[#09090f] px-4 py-5 text-white sm:px-8 sm:py-8">
+      <DataRain
+        fullscreen
+        className="pointer-events-none opacity-40"
+        count={1500}
+        flowSpeed={0.9}
+        palette={{ calm: '#a3e635', mid: '#22e6ff', hot: '#ff3d9a' }}
+      />
+      <div className="upload-builder-content relative z-10 mx-auto w-full max-w-[1160px]">
+        <header className="mb-8 flex items-center justify-between gap-4 border-b border-white/10 pb-4">
+          <Link href="/" className="flex items-center gap-3 text-white no-underline" aria-label="StudySync overview">
+            <span className="grid size-9 place-items-center rounded-xl border border-[#a3e635]/25 bg-[#a3e635]/10 text-[#a3e635]">
+              <Sparkles size={17} aria-hidden="true" />
+            </span>
+            <span className="text-sm font-semibold tracking-wide">StudySync</span>
+            <span className="hidden text-xs text-white/40 sm:inline">/ Add material</span>
           </Link>
-          <Link href="/dashboard" className="workspace-nav-item">
-            <CalendarDays size={18} aria-hidden="true" />
-            <span>My schedule</span>
-          </Link>
-          <Link href="/upload" className="workspace-nav-item workspace-nav-item-active" aria-current="page">
-            <Upload size={18} aria-hidden="true" />
-            <span>Add material</span>
-          </Link>
-        </nav>
-        <div className="workspace-sidebar-bottom">
-          <div className="workspace-sidebar-note">
-            <span className="workspace-sidebar-note-icon"><Heart size={16} aria-hidden="true" /></span>
-            <span><strong>Plan for your real week</strong><small>Classes, breaks, and rest count.</small></span>
-          </div>
-          <span className="workspace-version">STUDYSYNC · PLAN BUILDER</span>
-        </div>
-      </aside>
-
-      <div className="workspace-main">
-        <header className="workspace-topbar">
-          <div className="workspace-breadcrumb">
-            <Link href="/">Workspace</Link>
-            <ChevronRight size={14} aria-hidden="true" />
-            <strong>New study plan</strong>
-          </div>
-          <div className="workspace-topbar-actions">
-            <span className="upload-topbar-progress"><span /> Step 1 of 3</span>
-            <Link href="/" className="upload-exit-link">Exit builder</Link>
-          </div>
+          <LiquidButton
+            asChild
+            size="sm"
+            className="isolate overflow-hidden rounded-full border border-white/20 bg-white/[0.06] text-white backdrop-blur-xl hover:bg-white/[0.12] focus-visible:ring-[#A3E635]"
+          >
+            <Link href="/">
+              <ArrowLeft aria-hidden="true" />
+              Overview
+            </Link>
+          </LiquidButton>
         </header>
 
-        <div className="workspace-content upload-app-content">
-          <section className="upload-page-heading">
-            <div>
-              <p className="workspace-overline">BUILD YOUR STUDY PLAN <span>·</span> STEP 01</p>
-              <h1>Add your course material</h1>
-              <p>Start with a syllabus, lecture notes, or a simple chapter list. We&apos;ll organize it into study topics.</p>
+        <UploadBento
+          samples={UPLOAD_SAMPLE_PRESETS}
+          onLoadSample={handleLoadSample}
+          sampleLoading={parseState === 'parsing'}
+          currentMaterial={
+            <>
+              <strong className="upload-bento-status-title">
+                {file?.name ?? result?.title ?? (activeLineCount ? customTitle || 'Text material' : 'No material added yet')}
+              </strong>
+              <p className="upload-bento-status-detail">
+                {result
+                  ? `${result.items.length} topics organized · ${result.totalHours}h estimated`
+                  : file
+                  ? `${(file.size / 1024).toFixed(0)} KB · Ready to analyze`
+                  : activeLineCount
+                  ? `${activeLineCount} ${activeLineCount === 1 ? 'line' : 'lines'} added`
+                  : 'Add a file, paste notes, or choose a sample.'}
+              </p>
+            </>
+          }
+          guide={
+            <>
+              <div className="upload-guide-intro">
+                <span className="upload-guide-icon"><Sparkles size={17} aria-hidden="true" /></span>
+                <p className="workspace-overline">QUICK GUIDE</p>
+                <h4>{inputMode === 'file' ? 'Bring your course outline' : inputMode === 'chapters' ? 'Give each chapter context' : 'Start with readable notes'}</h4>
+                <p>
+                  {inputMode === 'file'
+                    ? 'A syllabus or course outline gives the topic organizer the clearest structure to work with.'
+                    : inputMode === 'chapters'
+                    ? 'Add the course or exam name, then put each chapter on its own line.'
+                    : 'Headings and chapter names make it easier to group related material.'}
+                </p>
+              </div>
+              <div className="upload-guide-divider" />
+              <p className="upload-guide-label">A FEW HELPFUL TIPS</p>
+              <ul className="upload-guide-list">
+                <li><CheckCircle size={15} aria-hidden="true" /><span>Include the subject or course name.</span></li>
+                <li><CheckCircle size={15} aria-hidden="true" /><span>Keep chapter headings in the material.</span></li>
+                <li><CheckCircle size={15} aria-hidden="true" /><span>You can review topics before scheduling.</span></li>
+              </ul>
+              <div className="upload-guide-next">
+                <span>02</span>
+                <div>
+                  <strong>Next: shape your week</strong>
+                  <p>Add classes, routines, and the time you have for studying.</p>
+                </div>
+              </div>
+            </>
+          }
+          formats={<UploadFormatSummary />}
+          extractor={
+            <div className="upload-bento-extractor-content">
+              <p className="upload-bento-extractor-step">STEP 01 / 03 · TOPIC ORGANIZER</p>
+              <h2>Auto-Parse</h2>
+              <p className="upload-bento-extractor-description">
+                Organize chapters, estimate difficulty, and prepare topics for your study plan.
+              </p>
+              {parseState === 'parsing' ? (
+                <div className="upload-bento-progress" role="status" aria-live="polite">
+                  <div className="upload-bento-progress-heading">
+                    <Loader2 size={17} className="animate-spin" aria-hidden="true" />
+                    <span>Organizing your material</span>
+                  </div>
+                  <div className="progress-track">
+                    <div className="progress-fill" style={{ width: `${((parseStep + 1) / PARSE_STEPS.length) * 100}%` }} />
+                  </div>
+                  <p>{PARSE_STEPS[parseStep]}</p>
+                </div>
+              ) : (
+                <div className="upload-bento-next-step">
+                  <strong>{parseState === 'done' ? 'Topics are ready' : 'Next step'}</strong>
+                  <p>
+                    {parseState === 'done'
+                      ? 'Review the organized topics, then continue to your weekly routine.'
+                      : 'Add course material to generate a topic list and estimated study hours.'}
+                  </p>
+                </div>
+              )}
+              {(parseState === 'idle' || parseState === 'error') && (
+                <LiquidButton
+                  type="button"
+                  size="xl"
+                  onClick={handleParse}
+                  disabled={
+                    inputMode === 'file' ? !file
+                    : inputMode === 'chapters' ? !chapterInput.trim()
+                    : !pastedText.trim()
+                  }
+                  className="upload-bento-extractor-action isolate mt-auto w-full overflow-hidden rounded-2xl border border-white/20 bg-white/[0.06] text-white shadow-[0_8px_32px_rgba(0,0,0,0.18)] backdrop-blur-xl hover:border-white/30 hover:bg-white/[0.12] focus-visible:ring-[#A3E635]"
+                >
+                  <Sparkles aria-hidden="true" />
+                  {parseState === 'error'
+                    ? 'Try again'
+                    : inputMode === 'chapters'
+                    ? 'Build my topic list'
+                    : inputMode === 'paste'
+                    ? 'Organize my notes'
+                    : 'Find my syllabus topics'}
+                  <ChevronRight aria-hidden="true" />
+                </LiquidButton>
+              )}
             </div>
-          </section>
-
-          <nav className="upload-stepper" aria-label="Study plan steps">
-            <div className="upload-step upload-step-current" aria-current="step">
-              <span>01</span><strong>Course material</strong>
+          }
+        >
+          <div className="upload-bento-main-heading">
+            <div className="upload-page-heading !mb-0">
+              <div>
+                <p className="workspace-overline">STUDYSYNC <span>·</span> STEP 01: ADD MATERIAL</p>
+                <h1 id="upload-page-title">Add your <span>course material</span></h1>
+                <p>Start with a syllabus, lecture notes, or a simple chapter list. We&apos;ll organize it into study topics.</p>
+              </div>
+              <span className="upload-bento-step-count">STEP 1 OF 3</span>
             </div>
-            <span className="upload-step-connector" aria-hidden="true" />
-            <div className="upload-step">
-              <span>02</span><strong>Your week</strong>
-            </div>
-            <span className="upload-step-connector" aria-hidden="true" />
-            <div className="upload-step">
-              <span>03</span><strong>Study plan</strong>
-            </div>
-          </nav>
-
-          <div className="upload-app-grid">
-          <section className="upload-workspace" aria-labelledby="upload-workspace-title">
+            <nav className="upload-stepper" aria-label="Study plan steps">
+              <div className="upload-step upload-step-current" aria-current="step">
+                <span>01</span><strong>Add material</strong>
+              </div>
+              <span className="upload-step-connector" aria-hidden="true" />
+              <div className="upload-step"><span>02</span><strong>Your week</strong></div>
+              <span className="upload-step-connector" aria-hidden="true" />
+              <div className="upload-step"><span>03</span><strong>Schedule</strong></div>
+            </nav>
+          </div>
           <div className="upload-workspace-heading">
             <div>
               <p>CHOOSE WHAT YOU HAVE</p>
-              <h2 id="upload-workspace-title">Add your material</h2>
+              <h2 id="upload-workspace-title">Choose how to add it</h2>
             </div>
             <span className="upload-workspace-index">STEP 01 / 03</span>
           </div>
@@ -456,108 +573,6 @@ Class 12 Chemistry
           </div>
         )}
 
-        <details className="upload-samples">
-          <summary>
-            <span>Not ready with a syllabus?</span>
-            <span>Try a sample <ChevronRight size={15} aria-hidden="true" /></span>
-          </summary>
-          <div className="upload-sample-options">
-            {[
-              { label: 'Biology Class 12 (CBSE)', idx: 2 },
-              { label: 'CS Engineering Sem 5', idx: 0 },
-              { label: 'UPSC General Studies', idx: 1 },
-            ].map((demo) => (
-              <button
-                key={demo.label}
-                type="button"
-                disabled={parseState === 'parsing'}
-                onClick={async () => {
-                  setParseState('parsing');
-                  const { parseWithMock } = await import('@/lib/syllabusParser');
-                  const parsed = await parseWithMock(demo.idx);
-                  setResult(parsed);
-                  setParseState('done');
-                  setFile({ name: `${demo.label}.pdf`, size: 0 } as File);
-                }}
-                className="upload-sample-button"
-              >
-                <FileText size={15} aria-hidden="true" /> {demo.label}
-              </button>
-            ))}
-          </div>
-        </details>
-
-        <div className="upload-source-summary" aria-live="polite">
-          <span className="upload-source-icon">
-            {parseState === 'error'
-              ? <AlertTriangle size={16} aria-hidden="true" />
-              : parseState === 'done'
-              ? <CheckCircle size={16} aria-hidden="true" />
-              : <FileText size={16} aria-hidden="true" />}
-          </span>
-          <span className="upload-source-copy">
-            <small>{parseState === 'error' ? 'CHECK YOUR INPUT' : parseState === 'done' ? 'MATERIAL READY' : 'CURRENT MATERIAL'}</small>
-            <strong>
-              {parseState === 'error'
-                ? 'Needs attention'
-                : parseState === 'done'
-                ? 'Topics organized'
-                : inputMode === 'file'
-                ? file?.name ?? 'No file added yet'
-                : activeLineCount
-                ? `${activeLineCount} ${activeLineCount === 1 ? 'line' : 'lines'} added`
-                : 'Nothing added yet'}
-            </strong>
-          </span>
-          <span className="upload-source-detail">
-            {inputMode === 'file'
-              ? file ? `${(file.size / 1024).toFixed(0)} KB` : 'Up to 20 MB'
-              : inputMode === 'chapters' ? 'Chapter list' : 'Pasted notes'}
-          </span>
-        </div>
-
-        {/* Action Button */}
-        {parseState === 'idle' && (
-          <div className="mt-5 sm:mt-6 text-center animate-scaleIn">
-            <button
-              onClick={handleParse}
-              disabled={
-                inputMode === 'file' ? !file
-                : inputMode === 'chapters' ? !chapterInput.trim()
-                : !pastedText.trim()
-              }
-              className="upload-submit"
-            >
-              <Sparkles className="w-5 h-5 flex-shrink-0" />
-              {inputMode === 'chapters'
-                ? 'Build my topic list'
-                : inputMode === 'paste'
-                ? 'Organize my notes'
-                : 'Find my syllabus topics'}
-            </button>
-            {inputMode === 'chapters' && (
-              <p className="text-xs text-[#888baa] mt-2">You can review the topics before building your schedule.</p>
-            )}
-          </div>
-        )}
-
-        {/* Parsing Progress */}
-        {parseState === 'parsing' && (
-          <div className="mt-5 sm:mt-6 card p-5 sm:p-6 animate-scaleIn">
-            <div className="flex items-center gap-3 mb-4">
-              <Loader2 className="w-5 h-5 text-primary-400 animate-spin flex-shrink-0" />
-              <span className="font-semibold">Extracting topics from your syllabus…</span>
-            </div>
-            <div className="progress-track mb-3">
-              <div
-                className="progress-fill"
-                style={{ width: `${((parseStep + 1) / PARSE_STEPS.length) * 100}%` }}
-              />
-            </div>
-            <p className="text-sm text-[#888baa]">{PARSE_STEPS[parseStep]}</p>
-          </div>
-        )}
-
         {/* Parsing Notice */}
         {parseState === 'error' && (
           <div className="mt-5 sm:mt-6 space-y-3 animate-scaleIn">
@@ -732,65 +747,17 @@ Class 12 Chemistry
               </div>
             </div>
 
-            <button onClick={handleContinue} className="btn btn-primary btn-lg w-full glow-primary">
-              Continue to weekly routine <ChevronRight className="w-5 h-5 flex-shrink-0" />
-            </button>
+            <LiquidButton
+              type="button"
+              size="xl"
+              onClick={handleContinue}
+              className="isolate w-full overflow-hidden rounded-full border border-white/20 bg-white/[0.06] text-white shadow-[0_8px_32px_rgba(0,0,0,0.18)] backdrop-blur-xl hover:border-white/30 hover:bg-white/[0.12] focus-visible:ring-[#A3E635]"
+            >
+              Continue to weekly routine <ChevronRight aria-hidden="true" />
+            </LiquidButton>
           </div>
         )}
-        </section>
-
-          <aside className="upload-guide-panel" aria-label="Material tips and next steps">
-            <div className="upload-guide-intro">
-              <span className="upload-guide-icon"><Sparkles size={17} aria-hidden="true" /></span>
-              <p className="workspace-overline">QUICK GUIDE</p>
-              <h2>{inputMode === 'file' ? 'Bring your course outline' : inputMode === 'chapters' ? 'Give each chapter context' : 'Start with readable notes'}</h2>
-              <p>
-                {inputMode === 'file'
-                  ? 'A syllabus or course outline gives the topic organizer the clearest structure to work with.'
-                  : inputMode === 'chapters'
-                  ? 'Add the course or exam name, then put each chapter on its own line.'
-                  : 'Headings and chapter names make it easier to group related material.'}
-              </p>
-            </div>
-
-            <div className="upload-guide-divider" />
-            <p className="upload-guide-label">A FEW HELPFUL TIPS</p>
-            <ul className="upload-guide-list">
-              <li><CheckCircle size={15} aria-hidden="true" /><span>Include the subject or course name.</span></li>
-              <li><CheckCircle size={15} aria-hidden="true" /><span>Keep chapter headings in the material.</span></li>
-              <li><CheckCircle size={15} aria-hidden="true" /><span>You can review topics before scheduling.</span></li>
-            </ul>
-
-            {inputMode === 'file' && (
-              <div className="upload-guide-formats">
-                <span>SUPPORTED FILES</span>
-                <p>PDF · PNG · JPG · WEBP · TXT · MD</p>
-                <small>Maximum file size: 20 MB</small>
-              </div>
-            )}
-
-            <div className="upload-guide-next">
-              <span>02</span>
-              <div>
-                <strong>Next: shape your week</strong>
-                <p>Add classes, routines, and the time you have for studying.</p>
-              </div>
-            </div>
-          </aside>
-          </div>
-        </div>
-
-        <nav className="workspace-mobile-nav upload-mobile-nav" aria-label="Mobile workspace navigation">
-          <Link href="/" className="workspace-mobile-nav-item">
-            <LayoutDashboard size={18} aria-hidden="true" /><span>Home</span>
-          </Link>
-          <Link href="/dashboard" className="workspace-mobile-nav-item">
-            <CalendarDays size={18} aria-hidden="true" /><span>Schedule</span>
-          </Link>
-          <Link href="/upload" className="workspace-mobile-nav-item workspace-mobile-nav-active" aria-current="page">
-            <Upload size={18} aria-hidden="true" /><span>Add material</span>
-          </Link>
-        </nav>
+          </UploadBento>
       </div>
     </main>
   );
